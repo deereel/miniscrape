@@ -10,6 +10,15 @@ import pandas as pd
 from dotenv import load_dotenv
 from scraper import scrape
 
+# Debug info
+print(f"Python version: {sys.version}")
+print(f"Current directory: {os.getcwd()}")
+print(f"Script directory: {os.path.dirname(os.path.abspath(__file__))}")
+
+# Ensure working directory is script directory
+os.chdir(os.path.dirname(os.path.abspath(__file__)))
+print(f"Changed directory to: {os.getcwd()}")
+
 load_dotenv()
 CH_API_KEY = os.environ.get("COMPANIES_HOUSE_API_KEY", "")
 
@@ -46,9 +55,13 @@ def run_queries(queries: list[str]):
     df = pd.DataFrame(rows)
     print("\n" + df.to_string(index=False))
 
-    out = "results.xlsx"
-    df.to_excel(out, index=False)
-    print(f"\n  Results saved to {out}")
+    # Save as CSV (more reliable than Excel)
+    out = "results.csv"
+    try:
+        df.to_csv(out, index=False, encoding='utf-8-sig')
+        print(f"\n  Results saved to {out}")
+    except Exception as e:
+        print(f"\n  Error saving results file: {e}")
 
 
 def print_menu():

@@ -5,3 +5,7 @@ pandas
 ddgs
 lxml
 python-dotenv
+nameparser
+langchain
+selenium
+webdriver-manager

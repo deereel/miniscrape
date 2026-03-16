@@ -4,6 +4,7 @@ import base64
 import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
+from nameparser import HumanName
 
 load_dotenv()
 
@@ -28,6 +29,15 @@ _GENERIC_TITLES = {
     "our team", "services", "welcome", "page not found", "404"
 }
 
+# Source reliability scores (higher = more reliable)
+_SOURCE_RELIABILITY = {
+    "Website": 95,
+    "Companies House": 90,
+    "LinkedIn": 85,
+    "Google snippet": 60,
+    "DuckDuckGo": 55
+}
+
 _NAME_NOISE = re.compile(
     r"\s*[\|\-–—]\s*(LinkedIn|Facebook|Twitter|Instagram|Wikipedia|Home|"
     r"Welcome|Official Site|Official Website)[^$]*$",
@@ -41,6 +51,8 @@ def _get(url, **kwargs):
     try:
         r = requests.get(url, headers=HEADERS, timeout=10, **kwargs)
         r.raise_for_status()
+        # Force UTF-8 encoding to avoid encoding issues
+        r.encoding = 'utf-8'
         return r
     except Exception:
         return None
@@ -59,15 +71,42 @@ def _done(result: dict) -> bool:
     return all([result.get("company_name"), result.get("address"), result.get("officer")])
 
 
+def _get_source_reliability(source: str) -> int:
+    """Get reliability score for a source (higher = more reliable)."""
+    source_lower = source.lower()
+    for known_source, score in _SOURCE_RELIABILITY.items():
+        if known_source.lower() in source_lower:
+            return score
+    # Default score for unknown sources
+    return 50
+
+
 def _merge(base: dict, update: dict) -> dict:
     # Only set company name if not already found from the website
     if not base.get("company_name") and _is_real_name(update.get("company_name", "")):
         base["company_name"] = update["company_name"]
+    
+    # For address and officer, check if we have a more reliable source
     for key in ["address", "officer", "registered_name"]:
-        if not base.get(key) and update.get(key):
-            base[key] = update[key]
+        if update.get(key):
+            if not base.get(key):
+                base[key] = update[key]
+            else:
+                # Compare source reliability
+                base_score = _get_source_reliability(base.get("source", ""))
+                update_score = _get_source_reliability(update.get("source", ""))
+                if update_score > base_score:
+                    base[key] = update[key]
+    
     if not base.get("source") and update.get("source"):
         base["source"] = update["source"]
+    elif base.get("source") and update.get("source"):
+        # Update source if new source is more reliable
+        base_score = _get_source_reliability(base["source"])
+        update_score = _get_source_reliability(update["source"])
+        if update_score > base_score:
+            base["source"] = update["source"]
+    
     return base
 
 
@@ -145,6 +184,37 @@ def _extract_person_name(text: str) -> str:
     return ""
 
 
+def _parse_person_name(name: str) -> dict:
+    """Parse a full name into first and last name using AI-powered nameparser."""
+    try:
+        parsed = HumanName(name)
+        return {
+            "first": parsed.first.strip(),
+            "last": parsed.last.strip(),
+            "middle": parsed.middle.strip(),
+            "suffix": parsed.suffix.strip(),
+            "prefix": parsed.title.strip()
+        }
+    except Exception:
+        # Fallback if parsing fails
+        parts = name.strip().split()
+        if len(parts) >= 2:
+            return {
+                "first": parts[0],
+                "last": " ".join(parts[1:]),
+                "middle": "",
+                "suffix": "",
+                "prefix": ""
+            }
+        return {
+            "first": name,
+            "last": "",
+            "middle": "",
+            "suffix": "",
+            "prefix": ""
+        }
+
+
 # ── Step 1: Website scrape ─────────────────────────────────────────────────
 
 def _extract_registered_name(soup: BeautifulSoup) -> str:
@@ -169,6 +239,66 @@ def scrape_website(url: str, needs_name=True, needs_address=True, needs_officer=
     base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
     result = {"company_name": "", "address": "", "officer": "", "registered_name": "", "source": url}
     subpages = ["", "/contact", "/contact-us", "/our-founder", "/about-us", "/about", "/team", "/our-team"]
+    
+    # Check for manual overrides
+    from site_overrides import get_site_override
+    override = get_site_override(url)
+    if override:
+        print(f"  Using manual override for: {url}")
+        return override
+        
+    # First, try regular scraping
+    for i, path in enumerate(subpages):
+        if not needs_address and not needs_officer and not needs_name:
+            break
+        page_url = url if path == "" else urljoin(base, path)
+        r = _get(page_url)
+        if not r:
+            continue
+        soup = BeautifulSoup(r.text, "lxml")
+        page_text_raw = soup.get_text(" ", strip=True)
+        # Skip Cloudflare / bot-challenge pages
+        if any(p in page_text_raw.lower() for p in ["one moment", "checking your browser", "cf-browser-verification", "just a moment"]):
+            continue
+        for tag in soup(["script", "style"]):
+            tag.decompose()
+        text = soup.get_text(" ", strip=True)
+
+        if needs_name and i == 0 and not result["company_name"]:
+            result["company_name"] = _extract_company_name(soup)
+        if i == 0 and not result["registered_name"]:
+            result["registered_name"] = _extract_registered_name(soup)
+        if needs_address and not result["address"]:
+            result["address"] = _extract_address(text)
+        if needs_officer and i > 0 and not result["officer"]:
+            result["officer"] = _extract_person_name(text)
+
+        if result["address"] and result["officer"]:
+            break
+    
+    # If regular scraping failed, try Selenium for JavaScript-rendered content
+    if (needs_name and not result["company_name"]) or \
+       (needs_address and not result["address"]) or \
+       (needs_officer and not result["officer"]):
+        print(f"  Regular scraping failed, trying Selenium for: {url}")
+        try:
+            from selenium_scraper import scrape_with_selenium
+            selenium_result = scrape_with_selenium(url)
+            
+            # Merge results from Selenium
+            if needs_name and not result["company_name"] and selenium_result["company_name"]:
+                result["company_name"] = selenium_result["company_name"]
+            if needs_address and not result["address"] and selenium_result["address"]:
+                result["address"] = selenium_result["address"]
+            if needs_officer and not result["officer"] and selenium_result["officer"]:
+                result["officer"] = selenium_result["officer"]
+            if not result["registered_name"] and selenium_result["registered_name"]:
+                result["registered_name"] = selenium_result["registered_name"]
+                
+        except Exception as e:
+            print(f"  Selenium failed: {e}")
+    
+    return result
 
     for i, path in enumerate(subpages):
         if not needs_address and not needs_officer and not needs_name:

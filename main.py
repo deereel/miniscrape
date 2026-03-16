@@ -29,14 +29,17 @@ def run_queries(queries: list[str]):
         print(f"\n  Scraping: {q} ...")
         result = scrape(q)
         officer = result.get("officer", "")
-        parts = officer.rsplit(" ", 1) if officer else ["", ""]
-        first = parts[0] if len(parts) > 1 else officer
-        last = parts[1] if len(parts) > 1 else ""
+        # Use AI-powered name parser to split first/last names
+        from scraper import _parse_person_name
+        parsed = _parse_person_name(officer)
         rows.append({
             "Company Full Name": result.get("company_name", ""),
             "Company Address":   result.get("address", ""),
-            "Officer First Name": first,
-            "Officer Last Name":  last,
+            "Officer First Name": parsed["first"],
+            "Officer Last Name":  parsed["last"],
+            "Officer Middle Name": parsed["middle"],
+            "Officer Title": parsed["prefix"],
+            "Officer Suffix": parsed["suffix"],
             "Source":             result.get("source", ""),
         })
 

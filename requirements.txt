@@ -12,3 +12,6 @@ webdriver-manager
 flask
 flask-wtf
 werkzeug
+pydantic
+pydantic[email]
+pydantic[ipaddress]

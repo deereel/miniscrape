@@ -5,6 +5,9 @@ import requests
 from bs4 import BeautifulSoup
 from dotenv import load_dotenv
 from nameparser import HumanName
+from schemas import ScrapingResult
+from typing import Optional
+from datetime import datetime
 
 load_dotenv()
 
@@ -548,12 +551,32 @@ def scrape(query: str) -> dict:
             is_url = True
 
     def _finalise(r: dict) -> dict:
-        r.pop("registered_name", None)
-        r.setdefault("company_name", query)
-        r.setdefault("address", "")
-        r.setdefault("officer", "")
-        r.setdefault("source", "")
-        return r
+        """Finalize and validate scraping result with Pydantic"""
+        try:
+            # Prepare data for validation
+            validated_data = {
+                "company_name": r.get("company_name", query).strip(),
+                "address": r.get("address", "").strip(),
+                "officer": r.get("officer", "").strip(),
+                "source": r.get("source", "").strip(),
+                "registered_name": r.get("registered_name", "").strip() if r.get("registered_name") else None,
+                "website_url": query if is_url else None,
+                "scrape_timestamp": datetime.now()
+            }
+            
+            # Validate with Pydantic
+            validated_result = ScrapingResult(**validated_data)
+            return validated_result.dict(exclude_none=True)
+            
+        except Exception as e:
+            print(f"  Validation error: {e}")
+            # Fallback to basic validation if Pydantic fails
+            r.pop("registered_name", None)
+            r.setdefault("company_name", query)
+            r.setdefault("address", "")
+            r.setdefault("officer", "")
+            r.setdefault("source", "")
+            return r
 
     # ── Step 1: Website (name + address only) ───────────────────────────
     if is_url:

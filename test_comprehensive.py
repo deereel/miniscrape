@@ -1,73 +1,65 @@
 #!/usr/bin/env python3
-"""Comprehensive test of all scraper improvements"""
+"""Comprehensive system test script"""
 
+import subprocess
 import sys
-import os
-sys.path.append(os.path.dirname(os.path.abspath(__file__)))
 
-from scraper import scrape
-from site_overrides import SITE_OVERRIDES
-
-
-def test_comprehensive():
-    """Test all scraper improvements"""
+def run_test(test_name, command):
+    print(f"\n{'='*50}")
+    print(f"Test: {test_name}")
+    print('-' * 50)
     
-    print("=" * 60)
-    print("MINISCRAPE COMPREHENSIVE TEST")
-    print("=" * 60)
+    try:
+        result = subprocess.run(command, capture_output=True, text=True, timeout=30)
+        
+        if result.stdout:
+            print(result.stdout.strip())
+        
+        if result.stderr:
+            print("\nERROR: Error output:")
+            print(result.stderr.strip())
+        
+        if result.returncode != 0:
+            print(f"\nERROR: Test failed with exit code: {result.returncode}")
+            return False
+        else:
+            print(f"\nOK: Test passed")
+            return True
+    except subprocess.TimeoutExpired:
+        print(f"\nERROR: Test timed out")
+        return False
+    except Exception as e:
+        print(f"\nERROR: Error: {e}")
+        return False
+
+def main():
+    print("=== Comprehensive System Test ===")
     
-    test_cases = [
-        ("https://www.arts1.co.uk", "Arts1 School of Performance", "Rebecca Carrington"),
-        ("https://www.onyxcomms.com", "Onyx Media and Communications", "Anne Griffin"),
-        ("https://www.verulamwebdesign.co.uk", "Verulam Web Design", "Nigel Minchin"),
-        ("https://www.sunrisesoftware.com", "Sunrise Software", "Dean Coleman")
+    tests = [
+        ("Web Application Functionality", ['python', 'test_web_app_functionality.py']),
+        ("Validation Schema", ['python', 'test_validation_demo.py']),
+        ("Scraping Functionality", ['python', 'test_scrape.py'])
     ]
     
-    all_passed = True
+    passed = 0
+    failed = 0
     
-    for url, expected_name, expected_officer in test_cases:
-        print(f"\n{'='*50}")
-        print(f"Testing: {url}")
-        print(f"{'='*50}")
-        
-        try:
-            result = scrape(url)
-            
-            print(f"Company Name: '{result['company_name']}'")
-            print(f"Address: '{result['address']}'")
-            print(f"Officer: '{result['officer']}'")
-            print(f"Source: '{result['source']}'")
-            
-            # Verify results against expected values
-            if expected_name and result['company_name']:
-                if expected_name.lower() in result['company_name'].lower():
-                    print("OK: Company name matches expected")
-                else:
-                    print(f"ERROR: Company name mismatch: expected '{expected_name}', got '{result['company_name']}'")
-                    all_passed = False
-                    
-            if expected_officer and result['officer']:
-                if expected_officer.lower() in result['officer'].lower():
-                    print("OK: Officer matches expected")
-                else:
-                    print(f"ERROR: Officer mismatch: expected '{expected_officer}', got '{result['officer']}'")
-                    all_passed = False
-                    
-        except Exception as e:
-            print(f"ERROR: Error scraping {url}: {e}")
-            import traceback
-            print(traceback.format_exc())
-            all_passed = False
+    for test_name, command in tests:
+        if run_test(test_name, command):
+            passed += 1
+        else:
+            failed += 1
     
-    print(f"\n{'='*60}")
-    if all_passed:
-        print("ALL TESTS PASSED!")
+    print(f"\n{'='*50}")
+    print(f"\nTest Results Summary:")
+    print(f"OK: Passed: {passed}")
+    print(f"ERROR: Failed: {failed}")
+    
+    if failed == 0:
+        print("\nOK: All tests passed! The application is working correctly.")
     else:
-        print("SOME TESTS FAILED!")
-    print(f"{'='*60}")
-    
-    return all_passed
-
+        print("\nERROR: Some tests failed. Please check the output for details.")
+        sys.exit(1)
 
 if __name__ == "__main__":
-    test_comprehensive()
+    main()

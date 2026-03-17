@@ -20,7 +20,7 @@ import time
 # Add current directory to path
 sys.path.insert(0, os.path.dirname(os.path.abspath(__file__)))
 
-from scraper import scrape
+from fast_scraper import scrape
 from main import load_queries
 
 app = Flask(__name__)

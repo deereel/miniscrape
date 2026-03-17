@@ -29,7 +29,11 @@ class ScrapingRequest(BaseModel):
 
 class BatchScrapingRequest(BaseModel):
     """Model for validating batch scraping requests"""
-    urls: list[HttpUrl] = Field(..., description="List of URLs to scrape", min_items=1)
+    urls: list[HttpUrl] = Field(
+        default=...,
+        min_items=1,
+        description="List of URLs to scrape"
+    )
     scrape_company_name: bool = Field(True, description="Scrape company name")
     scrape_address: bool = Field(True, description="Scrape address")
     scrape_officer: bool = Field(True, description="Scrape officer/contact info")

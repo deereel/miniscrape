@@ -33,7 +33,14 @@ class AIAddressExtractionAgent:
     
     @staticmethod
     def extract_address(text: str) -> str:
-        """Extract address from text using spaCy NER"""
+        """Extract address from text using spaCy NER and postcode-based extraction"""
+        
+        # First, try postcode-based extraction (more reliable for UK addresses)
+        postcode_based = AIAddressExtractionAgent._extract_postcode_based(text)
+        if postcode_based:
+            return postcode_based
+            
+        # Fallback to NER if no postcode found
         nlp = load_spacy_model()
         if nlp is False:
             return ""
@@ -50,7 +57,8 @@ class AIAddressExtractionAgent:
                     part = ent.text.strip()
                     if len(part) > 2 and part not in seen:
                         # Skip duplicates and short parts
-                        if part.lower() not in ["ai", "uk", "us", "dc"]:
+                        lower_part = part.lower()
+                        if lower_part not in ["ai", "uk", "us", "dc"] and not lower_part.startswith("contact"):
                             address_parts.append(part)
                             seen.add(part)
             
@@ -62,8 +70,7 @@ class AIAddressExtractionAgent:
                 
                 return ", ".join(address_parts)
             
-            # Fallback to regex if NER didn't find anything
-            return AIAddressExtractionAgent._extract_postcode_based(text)
+            return ""
             
         except Exception as e:
             print(f"Address extraction error: {e}")
@@ -92,6 +99,32 @@ class AIAddressExtractionAgent:
                 # Clean up the snippet
                 snippet = re.sub(r"\s+", " ", snippet)
                 snippet = re.sub(r"\n|\r", " ", snippet)
+                
+                # Try to find the start of the address by looking for common address prefixes
+                prefixes = ["address", "contact us", "location", "find us"]
+                best_start = 0
+                for prefix in prefixes:
+                    prefix_idx = snippet.lower().find(prefix)
+                    if prefix_idx != -1:
+                        best_start = prefix_idx + len(prefix)
+                        break
+                
+                snippet = snippet[best_start:].strip()
+                
+                # Remove any leftover prefix characters (like colons or newlines)
+                snippet = re.sub(r"^[:\s]+", "", snippet)
+                
+                # Find the position of the postcode in the snippet to ensure we include it
+                snippet_postcode_idx = snippet.upper().find(postcode)
+                if snippet_postcode_idx != -1:
+                    # Include up to the postcode and a little after
+                    snippet = snippet[:snippet_postcode_idx + len(postcode)].strip()
+                
+                # Clean up any remaining unwanted characters
+                snippet = re.sub(r"\s+", " ", snippet)
+                
+                # Remove any email or phone number prefixes
+                snippet = re.sub(r"^.*?Address\s*", "", snippet, flags=re.IGNORECASE)
                 
                 return snippet.strip()
         

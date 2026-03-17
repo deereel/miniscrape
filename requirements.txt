@@ -16,3 +16,4 @@ pydantic
 pydantic[email]
 pydantic[ipaddress]
 brotli
+spacy

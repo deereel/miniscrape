@@ -9,3 +9,6 @@ nameparser
 langchain
 selenium
 webdriver-manager
+flask
+flask-wtf
+werkzeug

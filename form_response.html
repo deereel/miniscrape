@@ -1,0 +1,447 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Scraping Results - MiniScrape</title>
+    <style>
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+        }
+        
+        body {
+            font-family: 'Segoe UI', Tahoma, Geneva, Verdana, sans-serif;
+            background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+            min-height: 100vh;
+            padding: 20px;
+        }
+        
+        .container {
+            max-width: 1200px;
+            margin: 0 auto;
+            background: white;
+            border-radius: 12px;
+            box-shadow: 0 20px 40px rgba(0,0,0,0.1);
+            overflow: hidden;
+        }
+        
+        .header {
+            background: linear-gradient(135deg, #4facfe 0%, #00f2fe 100%);
+            color: white;
+            padding: 30px;
+            text-align: center;
+        }
+        
+        .header h1 {
+            font-size: 2.5em;
+            margin-bottom: 10px;
+            font-weight: 300;
+        }
+        
+        .header p {
+            font-size: 1.2em;
+            opacity: 0.9;
+        }
+        
+        .content {
+            padding: 40px;
+        }
+        
+        .flash-messages {
+            margin-bottom: 20px;
+        }
+        
+        .flash-message {
+            padding: 15px 20px;
+            border-radius: 6px;
+            margin-bottom: 10px;
+            font-weight: 500;
+        }
+        
+        .flash-message.error {
+            background: #ffebee;
+            color: #c62828;
+            border-left: 4px solid #c62828;
+        }
+        
+        .flash-message.success {
+            background: #e8f5e9;
+            color: #2e7d32;
+            border-left: 4px solid #2e7d32;
+        }
+        
+        .nav {
+            background: #f5f5f5;
+            padding: 15px 40px;
+            border-bottom: 1px solid #ddd;
+        }
+        
+        .nav a {
+            color: #666;
+            text-decoration: none;
+            padding: 10px 20px;
+            margin-right: 10px;
+            border-radius: 4px;
+            transition: background-color 0.3s;
+        }
+        
+        .nav a:hover {
+            background: #e0e0e0;
+        }
+        
+        .nav a.active {
+            background: #4facfe;
+            color: white;
+        }
+        
+        
+    .results-container {
+        margin-top: 20px;
+    }
+    
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .results-header h2 {
+        color: #333;
+        font-weight: 300;
+    }
+    
+    .export-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .export-buttons .btn {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+    }
+    
+    th, td {
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid #e1e5e9;
+    }
+    
+    th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #333;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    td {
+        color: #555;
+        font-size: 14px;
+    }
+    
+    tr:hover {
+        background: #f8f9fa;
+    }
+    
+    tr:nth-child(even) {
+        background: #fafbfc;
+    }
+    
+    tr:nth-child(even):hover {
+        background: #f1f3f5;
+    }
+    
+    .status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .status.success {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .status.error {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .url-cell {
+        max-width: 300px;
+        word-wrap: break-word;
+    }
+    
+    .address-cell {
+        max-width: 400px;
+        word-wrap: break-word;
+    }
+    
+    .no-results {
+        text-align: center;
+        padding: 60px 20px;
+        color: #666;
+    }
+    
+    .no-results svg {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+    
+    .no-results h3 {
+        margin-bottom: 10px;
+        color: #333;
+    }
+    
+    .action-links {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    
+    .loading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #666;
+    }
+    
+    .spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #4facfe;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        border-left: 4px solid #dc3545;
+    }
+
+        
+        .footer {
+            background: #f5f5f5;
+            padding: 20px;
+            text-align: center;
+            color: #666;
+            font-size: 0.9em;
+            border-top: 1px solid #ddd;
+        }
+        
+        .btn {
+            display: inline-block;
+            padding: 10px 20px;
+            background: #4facfe;
+            color: white;
+            text-decoration: none;
+            border-radius: 6px;
+            border: none;
+            cursor: pointer;
+            font-size: 16px;
+            transition: background-color 0.3s;
+        }
+        
+        .btn:hover {
+            background: #3a86ff;
+        }
+        
+        .btn:disabled {
+            background: #ccc;
+            cursor: not-allowed;
+        }
+        
+        .btn.secondary {
+            background: #6c757d;
+        }
+        
+        .btn.secondary:hover {
+            background: #5a6268;
+        }
+        
+        .btn.danger {
+            background: #dc3545;
+        }
+        
+        .btn.danger:hover {
+            background: #c82333;
+        }
+        
+        .btn.success {
+            background: #28a745;
+        }
+        
+        .btn.success:hover {
+            background: #218838;
+        }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <div class="header">
+            <h1>🎯 MiniScrape</h1>
+            <p>Company Information Scraping Tool</p>
+        </div>
+        
+        <div class="nav">
+            <a href="/" class="active">Scrape</a>
+            <a href="/about" class="">About</a>
+        </div>
+        
+        <div class="content">
+            
+                
+            
+            
+            
+<div class="results-container">
+    <div class="results-header">
+        <h2>Scraping Results</h2>
+        <div class="export-buttons">
+            <a href="/export/tmpywnef14h.csv?format=csv" class="btn">
+                Download CSV
+            </a>
+            <a href="/export/tmpywnef14h.csv?format=xlsx" class="btn btn.secondary">
+                Download Excel
+            </a>
+        </div>
+    </div>
+    
+    
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>URL</th>
+                        <th>Company Name</th>
+                        <th>Company Address</th>
+                        <th>Officer First Name</th>
+                        <th>Officer Last Name</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    
+                        <tr>
+                            <td class="url-cell">
+                                <a href="https://acuitytraining.co.uk" target="_blank" rel="noopener noreferrer">
+                                    https://acuitytraining.co.uk
+                                </a>
+                            </td>
+                            <td>Acuity Training</td>
+                            <td class="address-cell">40 Occam Road, Guildford, Surrey GU2 7YG</td>
+                            <td>Benjamin</td>
+                            <td>Richardson</td>
+                            <td>Companies House</td>
+                            <td>
+                                
+                                    <span class="status success">✓ Success</span>
+                                
+                            </td>
+                        </tr>
+                    
+                        <tr>
+                            <td class="url-cell">
+                                <a href="https://york-it-services.co.uk" target="_blank" rel="noopener noreferrer">
+                                    https://york-it-services.co.uk
+                                </a>
+                            </td>
+                            <td>IT Support in York</td>
+                            <td class="address-cell">267 Melrosegate, York, YO10 3SN</td>
+                            <td>Simon</td>
+                            <td>Langley</td>
+                            <td>Companies House</td>
+                            <td>
+                                
+                                    <span class="status success">✓ Success</span>
+                                
+                            </td>
+                        </tr>
+                    
+                        <tr>
+                            <td class="url-cell">
+                                <a href="https://devereintellica.com" target="_blank" rel="noopener noreferrer">
+                                    https://devereintellica.com
+                                </a>
+                            </td>
+                            <td>De Vere Intellica</td>
+                            <td class="address-cell">7, Bell Yard, London, WC2A 2JR, England</td>
+                            <td>Simon</td>
+                            <td>Kidd</td>
+                            <td>Companies House</td>
+                            <td>
+                                
+                                    <span class="status success">✓ Success</span>
+                                
+                            </td>
+                        </tr>
+                    
+                        <tr>
+                            <td class="url-cell">
+                                <a href="https://sangersaah.co.uk" target="_blank" rel="noopener noreferrer">
+                                    https://sangersaah.co.uk
+                                </a>
+                            </td>
+                            <td>SANGERS AGRI LTD</td>
+                            <td class="address-cell">20, Wenlock Road, London, N1 7GU, England</td>
+                            <td>Luc</td>
+                            <td>Sangers</td>
+                            <td>Companies House</td>
+                            <td>
+                                
+                                    <span class="status success">✓ Success</span>
+                                
+                            </td>
+                        </tr>
+                    
+                </tbody>
+            </table>
+        </div>
+    
+    
+    <div class="action-links">
+        <a href="/" class="btn btn.secondary">
+            ← New Search
+        </a>
+    </div>
+</div>
+
+        </div>
+        
+        <div class="footer">
+            <p>© 2024 MiniScrape - Company Information Scraper</p>
+        </div>
+    </div>
+</body>
+</html>

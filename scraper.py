@@ -127,15 +127,21 @@ def _clean_name(raw: str) -> str:
 def _extract_company_name(soup: BeautifulSoup) -> str:
     tag = soup.find("meta", property="og:site_name")
     if tag and tag.get("content", "").strip():
-        return _clean_name(tag["content"].strip())
+        name = _clean_name(tag["content"].strip())
+        if len(name) < 100 and not any(word in name.lower() for word in ["design", "print", "legacy", "embedded", "business"]):
+            return name
     for prop in ["og:title", "twitter:title"]:
         tag = soup.find("meta", property=prop) or soup.find("meta", attrs={"name": prop})
         if tag and tag.get("content", "").strip():
-            return _clean_name(tag["content"].strip())
+            name = _clean_name(tag["content"].strip())
+            if len(name) < 100 and not any(word in name.lower() for word in ["design", "print", "legacy", "embedded", "business"]):
+                return name
     for sel in ["h1", "title"]:
         tag = soup.select_one(sel)
         if tag and tag.get_text(strip=True):
-            return _clean_name(tag.get_text(strip=True))[:120]
+            name = _clean_name(tag.get_text(strip=True))[:120]
+            if len(name) < 100 and not any(word in name.lower() for word in ["design", "print", "legacy", "embedded", "business"]):
+                return name
     return ""
 
 
@@ -238,7 +244,8 @@ def scrape_website(url: str, needs_name=True, needs_address=True, needs_officer=
     from urllib.parse import urlparse, urljoin
     base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
     result = {"company_name": "", "address": "", "officer": "", "registered_name": "", "source": url}
-    subpages = ["", "/contact", "/contact-us", "/our-founder", "/about-us", "/about", "/team", "/our-team"]
+    # Reduce number of subpages to check for faster scraping
+    subpages = ["", "/contact", "/about", "/team"]
     
     # Check for manual overrides
     from site_overrides import get_site_override
@@ -530,7 +537,15 @@ def _serper_urls(query: str, max_results: int = 5) -> list[str]:
 
 def scrape(query: str) -> dict:
     result = {"company_name": "", "address": "", "officer": "", "registered_name": "", "source": ""}
-    is_url = query.startswith("http")
+    # Check if it's a URL and add protocol if missing
+    is_url = query.strip().lower().startswith(("http://", "https://"))
+    if not is_url and "." in query and not query.startswith(" "):
+        # Try to determine if it's a URL (contains domain extension)
+        # Skip if it contains spaces or looks like a plain text query
+        if len(query.strip()) > 3 and any(ext in query.lower() for ext in [".com", ".co.uk", ".net", ".org", ".io", ".biz", ".info", ".uk", ".de", ".fr"]):
+            # Strip any leading/trailing whitespace and add https:// protocol
+            query = "https://" + query.strip().lstrip("http://").lstrip("https://").lstrip("www.")
+            is_url = True
 
     def _finalise(r: dict) -> dict:
         r.pop("registered_name", None)

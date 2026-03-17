@@ -1,0 +1,75 @@
+{% extends "base.html" %}
+
+{% block title %}Page Not Found - MiniScrape{% endblock %}
+
+{% block styles %}
+    .error-container {
+        text-align: center;
+        padding: 60px 20px;
+        color: #666;
+    }
+    
+    .error-container svg {
+        width: 120px;
+        height: 120px;
+        margin-bottom: 30px;
+        opacity: 0.5;
+    }
+    
+    .error-container h1 {
+        font-size: 3em;
+        margin-bottom: 20px;
+        color: #333;
+        font-weight: 300;
+    }
+    
+    .error-container h2 {
+        font-size: 1.5em;
+        margin-bottom: 20px;
+        color: #555;
+        font-weight: 300;
+    }
+    
+    .error-container p {
+        margin-bottom: 30px;
+        font-size: 1.1em;
+        max-width: 600px;
+        margin-left: auto;
+        margin-right: auto;
+    }
+    
+    .home-button {
+        display: inline-block;
+        padding: 12px 30px;
+        background: #4facfe;
+        color: white;
+        text-decoration: none;
+        border-radius: 6px;
+        font-size: 16px;
+        font-weight: 500;
+        transition: background-color 0.3s;
+    }
+    
+    .home-button:hover {
+        background: #3a86ff;
+    }
+{% endblock %}
+
+{% block content %}
+<div class="error-container">
+    <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+        <circle cx="12" cy="12" r="10" />
+        <line x1="12" y1="8" x2="12" y2="12" />
+        <line x1="12" y1="16" x2="12.01" y2="16" />
+    </svg>
+    <h1>404</h1>
+    <h2>Page Not Found</h2>
+    <p>
+        The page you are looking for might have been removed, had its name changed, 
+        or is temporarily unavailable.
+    </p>
+    <a href="{{ url_for('index') }}" class="home-button">
+        Back to Home
+    </a>
+</div>
+{% endblock %}

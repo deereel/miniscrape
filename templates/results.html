@@ -1,0 +1,229 @@
+{% extends "base.html" %}
+
+{% block title %}Scraping Results - MiniScrape{% endblock %}
+
+{% block styles %}
+    .results-container {
+        margin-top: 20px;
+    }
+    
+    .results-header {
+        display: flex;
+        justify-content: space-between;
+        align-items: center;
+        margin-bottom: 20px;
+    }
+    
+    .results-header h2 {
+        color: #333;
+        font-weight: 300;
+    }
+    
+    .export-buttons {
+        display: flex;
+        gap: 10px;
+    }
+    
+    .export-buttons .btn {
+        padding: 8px 16px;
+        font-size: 14px;
+    }
+    
+    .table-container {
+        overflow-x: auto;
+        border-radius: 8px;
+        box-shadow: 0 2px 10px rgba(0,0,0,0.1);
+    }
+    
+    table {
+        width: 100%;
+        border-collapse: collapse;
+        background: white;
+    }
+    
+    th, td {
+        padding: 12px 16px;
+        text-align: left;
+        border-bottom: 1px solid #e1e5e9;
+    }
+    
+    th {
+        background: #f8f9fa;
+        font-weight: 600;
+        color: #333;
+        font-size: 14px;
+        text-transform: uppercase;
+        letter-spacing: 0.5px;
+    }
+    
+    td {
+        color: #555;
+        font-size: 14px;
+    }
+    
+    tr:hover {
+        background: #f8f9fa;
+    }
+    
+    tr:nth-child(even) {
+        background: #fafbfc;
+    }
+    
+    tr:nth-child(even):hover {
+        background: #f1f3f5;
+    }
+    
+    .status {
+        display: inline-block;
+        padding: 4px 12px;
+        border-radius: 12px;
+        font-size: 12px;
+        font-weight: 500;
+    }
+    
+    .status.success {
+        background: #d4edda;
+        color: #155724;
+    }
+    
+    .status.error {
+        background: #f8d7da;
+        color: #721c24;
+    }
+    
+    .url-cell {
+        max-width: 300px;
+        word-wrap: break-word;
+    }
+    
+    .address-cell {
+        max-width: 400px;
+        word-wrap: break-word;
+    }
+    
+    .no-results {
+        text-align: center;
+        padding: 60px 20px;
+        color: #666;
+    }
+    
+    .no-results svg {
+        width: 80px;
+        height: 80px;
+        margin-bottom: 20px;
+        opacity: 0.5;
+    }
+    
+    .no-results h3 {
+        margin-bottom: 10px;
+        color: #333;
+    }
+    
+    .action-links {
+        display: flex;
+        gap: 10px;
+        margin-top: 20px;
+    }
+    
+    .loading {
+        display: flex;
+        align-items: center;
+        gap: 10px;
+        color: #666;
+    }
+    
+    .spinner {
+        width: 20px;
+        height: 20px;
+        border: 2px solid #f3f3f3;
+        border-top: 2px solid #4facfe;
+        border-radius: 50%;
+        animation: spin 1s linear infinite;
+    }
+    
+    @keyframes spin {
+        0% { transform: rotate(0deg); }
+        100% { transform: rotate(360deg); }
+    }
+    
+    .error-message {
+        background: #f8d7da;
+        color: #721c24;
+        padding: 15px;
+        border-radius: 6px;
+        margin-bottom: 20px;
+        border-left: 4px solid #dc3545;
+    }
+{% endblock %}
+
+{% block content %}
+<div class="results-container">
+    <div class="results-header">
+        <h2>Scraping Results</h2>
+        <div class="export-buttons">
+            <a href="{{ url_for('export', filename=csv_file, format='csv') }}" class="btn">
+                Download CSV
+            </a>
+            <a href="{{ url_for('export', filename=csv_file, format='xlsx') }}" class="btn btn.secondary">
+                Download Excel
+            </a>
+        </div>
+    </div>
+    
+    {% if results %}
+        <div class="table-container">
+            <table>
+                <thead>
+                    <tr>
+                        <th>URL</th>
+                        <th>Company Name</th>
+                        <th>Company Address</th>
+                        <th>Officer First Name</th>
+                        <th>Officer Last Name</th>
+                        <th>Source</th>
+                        <th>Status</th>
+                    </tr>
+                </thead>
+                <tbody>
+                    {% for result in results %}
+                        <tr>
+                            <td class="url-cell">
+                                <a href="{{ result.url }}" target="_blank" rel="noopener noreferrer">
+                                    {{ result.url }}
+                                </a>
+                            </td>
+                            <td>{{ result.company_name }}</td>
+                            <td class="address-cell">{{ result.address }}</td>
+                            <td>{{ result.officer_first }}</td>
+                            <td>{{ result.officer_last }}</td>
+                            <td>{{ result.source }}</td>
+                            <td>
+                                {% if result.company_name and not result.company_name.startswith('ERROR') %}
+                                    <span class="status success">✓ Success</span>
+                                {% else %}
+                                    <span class="status error">✗ Error</span>
+                                {% endif %}
+                            </td>
+                        </tr>
+                    {% endfor %}
+                </tbody>
+            </table>
+        </div>
+    {% else %}
+        <div class="no-results">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+                <path d="M9.879 7.519C9.982 6.519 10.778 5.723 11.778 5.723H13.223C14.223 5.723 15.018 6.519 15.12 7.519L16.523 14.523C16.628 15.128 16.384 15.752 15.885 16.195L13.885 17.808C13.516 18.093 13.014 18.195 12.509 18.103L6.855 17.124C6.083 17.001 5.486 16.305 5.577 15.506L6.455 8.012C6.513 7.431 6.936 6.907 7.517 6.822L11.283 6.155C11.383 6.137 11.484 6.128 11.585 6.128H13.223" />
+                <path d="M11.879 11.019V13.019H13.121V11.019H11.879Z" />
+            </svg>
+            <h3>No results found</h3>
+            <p>Try entering different URLs or check your file format</p>
+        </div>
+    {% endif %}
+    
+    <div class="action-links">
+        <a href="{{ url_for('index') }}" class="btn btn.secondary">
+            ← New Search
+        </a>
+    </div>
+</div>
+{% endblock %}

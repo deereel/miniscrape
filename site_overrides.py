@@ -21,6 +21,11 @@ SITE_OVERRIDES = {
         "company_name": "Sunrise Software",
         "address": "5th Floor, 167-169 Great Portland St, London, W1W 5PF",
         "officer": "Dean Coleman"
+    },
+    "acuitytraining.co.uk": {
+        "company_name": "Acuity Training Limited",
+        "address": "130 Wood Street, London, EC2V 2AL",
+        "officer": "David Pugh"
     }
 }
 

@@ -74,7 +74,8 @@ def get_site_override(url):
 def _get(url, **kwargs):
     """Fast HTTP GET with reasonable timeout and proper encoding handling"""
     try:
-        r = requests.get(url, headers=HEADERS, timeout=5, **kwargs)
+        # Increase timeout to 15 seconds for slower sites
+        r = requests.get(url, headers=HEADERS, timeout=15, verify=False, **kwargs)
         r.raise_for_status()
         
         # Try to decode the response properly
@@ -136,7 +137,7 @@ def _extract_company_name(soup: BeautifulSoup) -> str:
                 title = title.split("?")[0]
             if "#" in title:
                 title = title.split("#")[0]
-            if len(title) < 100:
+            if len(title) < 100 and title.lower() not in ["home", "welcome", "index", "main"]:
                 return title
     
     # Try h1 tags (common for company names)
@@ -151,15 +152,7 @@ def _extract_company_name(soup: BeautifulSoup) -> str:
 
 
 def _extract_address(text: str) -> str:
-    """Extract address using AI agents first, fallback to regex"""
-    try:
-        from ai_agents import AIAddressExtractionAgent
-        address = AIAddressExtractionAgent.extract_address(text)
-        if address:
-            return address
-    except Exception as e:
-        print(f"AI address extraction error: {e}")
-        pass
+    """Extract address using regex first, fallback to AI agents"""
     
     # Clean the text first to handle encoding issues
     try:
@@ -167,24 +160,43 @@ def _extract_address(text: str) -> str:
     except:
         pass
     
-    # Look for UK postcodes and extract surrounding text
+    # Look for UK postcodes and extract surrounding text (more robust)
     uk_postcode = re.search(r"[A-Z]{1,2}\d{1,2}\s?\d?[A-Z]{2}", text)
     if uk_postcode:
         snippet = text[max(0, uk_postcode.start() - 200):uk_postcode.end()]
         # Clean up the snippet
         snippet = re.sub(r"\s+", " ", snippet)
         snippet = re.sub(r"\n|\r", " ", snippet)
-        # Try to find address lines
-        address = ""
-        lines = snippet.split(",")
-        if len(lines) >= 2:
-            address = ", ".join(lines[-2:]).strip()
-        return address.strip()
+        
+        # Try to extract complete address by finding address components
+        # Look for address lines containing street, road, avenue, etc.
+        address_lines = []
+        for line in snippet.split(","):
+            line = line.strip()
+            if any(keyword in line.lower() for keyword in ["street", "road", "avenue", "drive", "court", "crescent", "close", "lane"]):
+                address_lines.append(line)
+        
+        if address_lines:
+            # Join address lines with postcode
+            return ", ".join(address_lines + [uk_postcode.group(0)]).strip()
+        else:
+            # Fallback to just returning what we found around postcode
+            return uk_postcode.group(0)
     
     # Look for patterns like "City, Country" or "Address, Town, Postcode"
     address_pattern = re.search(r"[\w\s]+(?:, [\w\s]+){2,}", text)
     if address_pattern:
         return address_pattern.group(0).strip()
+    
+    # Fallback to AI address extraction if regex fails
+    try:
+        from ai_agents import AIAddressExtractionAgent
+        address = AIAddressExtractionAgent.extract_address(text)
+        if address and len(address) > 3 and address.lower() not in ["london", "northamptonshire"]:
+            return address
+    except Exception as e:
+        print(f"AI address extraction error: {e}")
+        pass
     
     return ""
 
@@ -192,21 +204,24 @@ def _extract_address(text: str) -> str:
 def _extract_person_name(text: str) -> str:
     """Extract person name using fast patterns for common officer roles"""
     patterns = [
-        r"CEO\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,2})",
-        r"Managing Director\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,2})",
-        r"Founder\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,2})",
-        r"Owner\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,2})",
-        r"Director\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,2})",
-        r"Contact\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,2})",
-        r"Manager\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){0,2})"
+        r"CEO\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})",
+        r"Managing Director\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})",
+        r"Founder\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})",
+        r"Owner\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})",
+        r"Director\s*[:\s]+([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})",
+        r"([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})\s*-\s*CEO",
+        r"([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})\s*-\s*Managing Director",
+        r"([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})\s*-\s*Founder",
+        r"([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})\s*-\s*Owner",
+        r"([A-Z][a-zA-Z']+(?:\s[A-Z][a-zA-Z']+){1,2})\s*-\s*Director"
     ]
     
     for pattern in patterns:
         match = re.search(pattern, text)
         if match:
             name = match.group(1).strip()
-            # Validate name has at least first and last name
-            if len(name.split()) >= 2 and len(name) < 50:
+            # Validate name has at least first and last name and is not a keyword
+            if len(name.split()) >= 2 and len(name) < 50 and not any(keyword in name.lower() for keyword in ["contact", "us", "our", "team", "staff", "careers", "select", "specialities", "scientific", "equipment", "login", "accreditations", "lifting", "studios", "engineers", "mastering"]):
                 return name
     
     return ""

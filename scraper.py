@@ -8,6 +8,14 @@ from nameparser import HumanName
 from schemas import ScrapingResult
 from typing import Optional
 from datetime import datetime
+from ai_agents import (
+    AIAddressExtractionAgent,
+    AINameParserAgent,
+    AISourceRankingAgent,
+    AIPageClassifierAgent,
+    AIDeduplicationAgent,
+    AISearchAgent
+)
 
 load_dotenv()
 
@@ -61,6 +69,55 @@ def _get(url, **kwargs):
         return None
 
 
+def _whois_lookup(domain: str) -> dict:
+    """Perform a WHOIS lookup on a domain"""
+    try:
+        import whois
+        w = whois.whois(domain)
+        result = {}
+        
+        # Extract registrant information
+        if w.registrant:
+            result["registrant"] = str(w.registrant)
+        if w.org:
+            result["organization"] = str(w.org)
+        if w.address:
+            result["address"] = str(w.address)
+        if w.city:
+            result["city"] = str(w.city)
+        if w.state:
+            result["state"] = str(w.state)
+        if w.country:
+            result["country"] = str(w.country)
+        if w.registrar:
+            result["registrar"] = str(w.registrar)
+        
+        return result
+    except Exception as e:
+        print(f"  [!] WHOIS error: {e}")
+        return {}
+
+
+def _geocode_address(address: str) -> dict:
+    """Geocode an address using OpenStreetMap Nominatim API"""
+    try:
+        from geopy.geocoders import Nominatim
+        geolocator = Nominatim(user_agent="miniscrape")
+        location = geolocator.geocode(address)
+        
+        if location:
+            return {
+                "latitude": location.latitude,
+                "longitude": location.longitude,
+                "address": location.address
+            }
+        else:
+            return {}
+    except Exception as e:
+        print(f"  [!] Geocoding error: {e}")
+        return {}
+
+
 def _needs(result: dict) -> tuple[bool, bool, bool]:
     """Return (needs_name, needs_address, needs_officer)."""
     return (
@@ -76,10 +133,24 @@ def _done(result: dict) -> bool:
 
 def _get_source_reliability(source: str) -> int:
     """Get reliability score for a source (higher = more reliable)."""
+    # First, try to use the AI source ranking agent
+    try:
+        # Create a list of sources with the given source to rank
+        sources = [{"source": source}]
+        # The rank_sources method will sort them, but we just need the score
+        source_lower = source.lower()
+        for known_source, score in AISourceRankingAgent.SOURCE_RELIABILITY.items():
+            if known_source.lower() in source_lower:
+                return score
+    except Exception:
+        pass
+    
+    # Fall back to existing scoring
     source_lower = source.lower()
     for known_source, score in _SOURCE_RELIABILITY.items():
         if known_source.lower() in source_lower:
             return score
+    
     # Default score for unknown sources
     return 50
 
@@ -149,19 +220,8 @@ def _extract_company_name(soup: BeautifulSoup) -> str:
 
 
 def _extract_address(text: str) -> str:
-    # UK: anchor on postcode, walk back to last address starter
-    for match in re.finditer(r"[A-Z]{1,2}\d{1,2}\s?\d[A-Z]{2}", text):
-        snippet = text[max(0, match.start() - 200):match.end()]
-        starters = list(re.finditer(r"(?:Unit|Floor|Suite|\d{1,4})\s[A-Za-z]", snippet, re.IGNORECASE))
-        if starters:
-            return snippet[starters[-1].start():].strip()
-    # US ZIP fallback
-    us = re.search(
-        r"\d{1,4}\s[\w\s,\.]{5,60}(?:Street|St|Avenue|Ave|Road|Rd|Lane|Ln|Drive|Dr|Way|Court|Place|Square)"
-        r"[\w\s,\.]{0,40}\d{5}",
-        text, re.IGNORECASE
-    )
-    return us.group(0).strip() if us else ""
+    """Extract address using AI-powered extraction"""
+    return AIAddressExtractionAgent.extract_address(text)
 
 
 def _extract_person_name(text: str) -> str:
@@ -195,33 +255,32 @@ def _extract_person_name(text: str) -> str:
 
 def _parse_person_name(name: str) -> dict:
     """Parse a full name into first and last name using AI-powered nameparser."""
-    try:
-        parsed = HumanName(name)
+    parsed = AINameParserAgent.parse_name(name)
+    if parsed:
         return {
-            "first": parsed.first.strip(),
-            "last": parsed.last.strip(),
-            "middle": parsed.middle.strip(),
-            "suffix": parsed.suffix.strip(),
-            "prefix": parsed.title.strip()
+            "first": parsed.get("first", "").strip(),
+            "last": parsed.get("last", "").strip(),
+            "middle": parsed.get("middle", "").strip(),
+            "suffix": parsed.get("suffix", "").strip(),
+            "prefix": parsed.get("title", "").strip()
         }
-    except Exception:
-        # Fallback if parsing fails
-        parts = name.strip().split()
-        if len(parts) >= 2:
-            return {
-                "first": parts[0],
-                "last": " ".join(parts[1:]),
-                "middle": "",
-                "suffix": "",
-                "prefix": ""
-            }
+    # Fallback if parsing fails
+    parts = name.strip().split()
+    if len(parts) >= 2:
         return {
-            "first": name,
-            "last": "",
+            "first": parts[0],
+            "last": " ".join(parts[1:]),
             "middle": "",
             "suffix": "",
             "prefix": ""
         }
+    return {
+        "first": name,
+        "last": "",
+        "middle": "",
+        "suffix": "",
+        "prefix": ""
+    }
 
 
 # ── Step 1: Website scrape ─────────────────────────────────────────────────
@@ -247,8 +306,21 @@ def scrape_website(url: str, needs_name=True, needs_address=True, needs_officer=
     from urllib.parse import urlparse, urljoin
     base = f"{urlparse(url).scheme}://{urlparse(url).netloc}"
     result = {"company_name": "", "address": "", "officer": "", "registered_name": "", "source": url}
-    # Reduce number of subpages to check for faster scraping
-    subpages = ["", "/contact", "/about", "/team"]
+    
+    # Use AI to find relevant pages to scrape
+    categories = []
+    if needs_address:
+        categories.append("address")
+    if needs_officer:
+        categories.append("leadership")
+    if needs_name:
+        categories.append("company")
+    
+    relevant_urls = AISearchAgent.find_relevant_pages(urlparse(url).netloc, categories)
+    subpages = [urlparse(u).path for u in relevant_urls if urlparse(u).netloc == urlparse(url).netloc]
+    # Ensure we include the homepage
+    if "" not in subpages:
+        subpages.insert(0, "")
     
     # Check for manual overrides
     from site_overrides import get_site_override
@@ -624,6 +696,39 @@ def scrape(query: str) -> dict:
             result = _merge(result, ch)
             if _done(result):
                 return _finalise(result)
+
+    # ── Step 2.5: WHOIS Lookup ────────────────────────────────────────────
+    _, n_addr, n_off = _needs(result)
+    if is_url and (n_addr or not result.get("company_name")):
+        from urllib.parse import urlparse
+        domain = urlparse(query).netloc.replace("www.", "")
+        
+        whois_data = _whois_lookup(domain)
+        if whois_data:
+            whois_result = {"source": "WHOIS"}
+            
+            if not result.get("company_name") and whois_data.get("organization"):
+                whois_result["company_name"] = whois_data["organization"]
+                
+            if n_addr and whois_data.get("address"):
+                # Try to format the address
+                address_parts = []
+                if whois_data.get("address"):
+                    address_parts.append(whois_data["address"])
+                if whois_data.get("city"):
+                    address_parts.append(whois_data["city"])
+                if whois_data.get("state"):
+                    address_parts.append(whois_data["state"])
+                if whois_data.get("country"):
+                    address_parts.append(whois_data["country"])
+                
+                if address_parts:
+                    whois_result["address"] = ", ".join(address_parts)
+            
+            if whois_result.get("company_name") or whois_result.get("address"):
+                result = _merge(result, whois_result)
+                if _done(result):
+                    return _finalise(result)
 
     # ── Step 2b: Website officer fallback (if CH didn't find one) ────────
     if is_url and not result.get("officer"):

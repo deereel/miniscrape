@@ -2,3 +2,6 @@
 results.xlsx
 __pycache__/
 *.pyc
+venv/
+*.html
+test_specific_sites.tmp.py

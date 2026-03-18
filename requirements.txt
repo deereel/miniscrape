@@ -17,3 +17,8 @@ pydantic[email]
 pydantic[ipaddress]
 brotli
 spacy
+rapidfuzz
+fuzzywuzzy
+postal
+python-whois
+geopy

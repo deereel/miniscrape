@@ -75,10 +75,16 @@ def scrape_site_specific(url, site_name):
 
 if __name__ == "__main__":
     sites = [
-        ("https://www.arts1.co.uk", "Arts1"),
-        ("https://www.onyxcomms.com", "Onyx Comms"),
-        ("https://www.verulamwebdesign.co.uk", "Verulam Web Design"),
-        ("https://www.sunrisesoftware.com", "Sunrise Software")
+        ("https://www.blossomhouseschool.co.uk", "Blossom House School"),
+        ("https://www.ballyhoo-pr.co.uk", "Ballyhoo PR"),
+        ("https://www.charnwood-milling.co.uk", "Charnwood Milling"),
+        ("https://www.argolin.com", "Argolin"),
+        ("https://www.booth-ac.com", "Booth AC"),
+        ("https://www.independentlifting.com", "Independent Lifting"),
+        ("https://www.beeteealarmsltd.co.uk", "Beetee Alarms Ltd"),
+        ("https://www.airstudios.com", "Air Studios"),
+        ("https://www.wymondhamcollege.org", "Wymondham College"),
+        ("https://www.beckprosper.com", "Beck Prosper")
     ]
     
     responses = []

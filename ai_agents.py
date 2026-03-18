@@ -155,10 +155,11 @@ class AISourceRankingAgent:
     """AI agent for ranking sources by reliability"""
     
     SOURCE_RELIABILITY = {
-        "Companies House": 95,
+        "Website": 95,
+        "Companies House": 90,
         "LinkedIn": 85,
-        "Website": 70,
-        "Google snippet": 60
+        "Google snippet": 60,
+        "DuckDuckGo": 55
     }
     
     @staticmethod
@@ -211,7 +212,7 @@ class AIPageClassifierAgent:
 
 
 class AIDeduplicationAgent:
-    """AI agent for deduplicating company names"""
+    """AI agent for deduplicating company names using fuzzy matching"""
     
     @staticmethod
     def normalize_company_name(name: str) -> str:
@@ -231,7 +232,7 @@ class AIDeduplicationAgent:
     
     @staticmethod
     def are_same_company(name1: str, name2: str) -> bool:
-        """Check if two company names refer to the same company"""
+        """Check if two company names refer to the same company using fuzzy matching"""
         norm1 = AIDeduplicationAgent.normalize_company_name(name1)
         norm2 = AIDeduplicationAgent.normalize_company_name(name2)
         
@@ -240,7 +241,7 @@ class AIDeduplicationAgent:
             if norm1 in norm2 or norm2 in norm1:
                 return True
             
-            # If they share most words (ignoring order)
+            # Check if they share most words (ignoring order)
             words1 = set(norm1.split())
             words2 = set(norm2.split())
             
@@ -248,6 +249,21 @@ class AIDeduplicationAgent:
                 overlap = len(words1.intersection(words2))
                 if overlap >= min(len(words1), len(words2)) - 1:
                     return True
+            
+            # Fuzzy matching (70% similarity threshold)
+            try:
+                from rapidfuzz import fuzz
+                similarity = fuzz.ratio(norm1, norm2)
+                if similarity >= 70:
+                    return True
+            except ImportError:
+                try:
+                    from fuzzywuzzy import fuzz
+                    similarity = fuzz.ratio(norm1, norm2)
+                    if similarity >= 70:
+                        return True
+                except ImportError:
+                    pass
         
         return False
     

@@ -156,3 +156,37 @@ AI Source Ranking
 Database
      ↓
 Dashboard
+
+
+
+
+
+improvements to consider
+
+APIs and open datasets to combine
+
+OpenCorporates API — company name, jurisdiction, address fields.
+Crunchbase API — company metadata and categories (requires account).
+Clearbit Enrichment API — provides location and industry from domain (paid, per-request).
+Companies House API (UK) — addresses and SIC codes.
+Use WHOIS/Reverse WHOIS where domain is known to link company names.
+5) Purchase or license industry-classified lists
+
+Industry associations, trade publications, or curated list vendors sell targeted lists (e.g., “US manufacturing firms 500–1000 employees”).
+Often supplied as ready CSV with contact/location and SIC/NAICS industry.
+6) DIY workflow for building a clean list (recommended minimal pipeline)
+1. Source collection: pick one or more data sources (OpenCorporates + Crunchbase + Clearbit).
+2. Extract: export CSV or use API to pull company name, address, and industry/category fields.
+3. Normalize names: lowercasing, strip punctuation, use fuzzy dedupe (fuzzywuzzy/rapidfuzz).
+4. Parse addresses: use address-parsing library (libpostal) to split street/city/state/postcode/country.
+5. Geocode & validate: batch geocode unresolved addresses (Google/Bing/Here/OpenStreetMap) to obtain canonical city/state/country.
+6. Map industries: convert raw category strings to a standard taxonomy (NAICS or SIC). Use lookup tables and fallback keyword matching.
+7. Quality checks: remove duplicates, fill missing countries by geocode, sample-check entries.
+8. Export: produce CSV/XLSX and optionally load into a database.
+
+7) Practical tips and legal considerations
+
+Define scope first: geography (global vs country), company size, public vs private, industry taxonomy (NAICS/SIC/ICB), and freshness (how current).
+Rate limits & costs: API calls and geocoding have quotas/fees—estimate volume beforehand.
+Licensing and GDPR: check terms before commercial use or resale; respect robots.txt and site terms if scraping; handle personal data under privacy laws.
+Deduplication: companies have subsidiaries and different legal names—decide whether to consolidate by parent or list separately.

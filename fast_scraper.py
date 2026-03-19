@@ -12,6 +12,55 @@ from dotenv import load_dotenv
 
 load_dotenv()
 
+
+def _whois_lookup(domain: str) -> dict:
+    """Perform a WHOIS lookup on a domain"""
+    try:
+        import whois
+        w = whois.whois(domain)
+        result = {}
+        
+        # Extract registrant information
+        if w.registrant:
+            result["registrant"] = str(w.registrant)
+        if w.org:
+            result["organization"] = str(w.org)
+        if w.address:
+            result["address"] = str(w.address)
+        if w.city:
+            result["city"] = str(w.city)
+        if w.state:
+            result["state"] = str(w.state)
+        if w.country:
+            result["country"] = str(w.country)
+        if w.registrar:
+            result["registrar"] = str(w.registrar)
+        
+        return result
+    except Exception as e:
+        print(f"  [!] WHOIS error: {e}")
+        return {}
+
+
+def _geocode_address(address: str) -> dict:
+    """Geocode an address using OpenStreetMap Nominatim API"""
+    try:
+        from geopy.geocoders import Nominatim
+        geolocator = Nominatim(user_agent="miniscrape")
+        location = geolocator.geocode(address)
+        
+        if location:
+            return {
+                "latitude": location.latitude,
+                "longitude": location.longitude,
+                "address": location.address
+            }
+        else:
+            return {}
+    except Exception as e:
+        print(f"  [!] Geocoding error: {e}")
+        return {}
+
 HEADERS = {
     "User-Agent": "Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36 (KHTML, like Gecko) Chrome/124.0.0.0 Safari/537.36",
     "Accept": "text/html,application/xhtml+xml,application/xml;q=0.9,*/*;q=0.8",
@@ -286,6 +335,30 @@ def scrape(query: str):
     if is_url:
         site = scrape_website_fast(query)
         result.update(site)
+        
+        # Try WHOIS lookup for additional information if needed
+        if not result["company_name"] or not result["address"]:
+            from urllib.parse import urlparse
+            domain = urlparse(query).netloc.replace("www.", "")
+            
+            whois_data = _whois_lookup(domain)
+            if whois_data:
+                if not result["company_name"] and whois_data.get("organization"):
+                    result["company_name"] = whois_data["organization"]
+                
+                if not result["address"] and whois_data.get("address"):
+                    address_parts = []
+                    if whois_data.get("address"):
+                        address_parts.append(whois_data["address"])
+                    if whois_data.get("city"):
+                        address_parts.append(whois_data["city"])
+                    if whois_data.get("state"):
+                        address_parts.append(whois_data["state"])
+                    if whois_data.get("country"):
+                        address_parts.append(whois_data["country"])
+                    
+                    if address_parts:
+                        result["address"] = ", ".join(address_parts)
     
     # Fallback if nothing was found
     if not result["company_name"] or result["company_name"] == query or len(result["company_name"]) < 3:

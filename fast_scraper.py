@@ -91,8 +91,8 @@ LEARNING_CACHE_FILE = os.path.join(os.path.dirname(__file__), "learning_cache.js
 
 # ── Search helpers (DuckDuckGo, Serper, Companies House) ───────────────────
 
-def _ddg_urls(query: str, max_results: int = 5) -> list[str]:
-    """Get URLs from DuckDuckGo search"""
+def _ddg_urls(query: str, max_results: int = 3) -> list[str]:
+    """Get URLs from DuckDuckGo search (reduced results for speed)"""
     try:
         from ddgs import DDGS
         results = DDGS().text(query, max_results=max_results)
@@ -101,8 +101,8 @@ def _ddg_urls(query: str, max_results: int = 5) -> list[str]:
         return []
 
 
-def _serper_urls(query: str, max_results: int = 5) -> list[str]:
-    """Get URLs from Serper (Google) search"""
+def _serper_urls(query: str, max_results: int = 3) -> list[str]:
+    """Get URLs from Serper (Google) search (reduced for speed)"""
     if not _SERPER_KEY:
         return []
     try:
@@ -110,7 +110,7 @@ def _serper_urls(query: str, max_results: int = 5) -> list[str]:
             "https://google.serper.dev/search",
             headers={"X-API-KEY": _SERPER_KEY, "Content-Type": "application/json"},
             json={"q": query, "num": max_results},
-            timeout=10
+            timeout=8
         )
         r.raise_for_status()
         return [item["link"] for item in r.json().get("organic", []) if "link" in item]
@@ -652,10 +652,10 @@ def get_site_override(url):
 
 
 def _get(url, **kwargs):
-    """Fast HTTP GET with reasonable timeout and proper encoding handling"""
+    """Fast HTTP GET with reduced timeout for speed"""
     try:
-        # Increase timeout to 15 seconds for slower sites
-        r = requests.get(url, headers=HEADERS, timeout=15, verify=False, **kwargs)
+        # Reduced timeout for faster failure on slow sites
+        r = requests.get(url, headers=HEADERS, timeout=8, verify=False, **kwargs)
         r.raise_for_status()
         
         # Try to decode the response properly
@@ -983,9 +983,10 @@ def scrape_website_fast(url):
 
 
 def scrape(query: str):
-    """Main fast scraping entry point with full search flow:
-    - Officer: DuckDuckGo → Companies House → Serper → Website
-    - Address: Website (contact/footer) → Companies House → DuckDuckGo → Serper
+    """Optimized fast scraping entry point - simplified for speed:
+    1. Website scrape (name + address from contact page)
+    2. DuckDuckGo for officer (if missing)
+    3. Companies House for remaining fields (quick API)
     """
     result = {"company_name": "", "address": "", "officer": "", "registered_name": "", "source": "", "confidence": {"company_name": 0.0, "address": 0.0, "officer": 0.0}}
 
@@ -995,9 +996,6 @@ def scrape(query: str):
         normalized = query.strip()
 
     # Note: We always scrape fresh as information may have changed.
-    # Cache entries (especially ManualVerified) are used as format guides only.
-    # Skipping cache return to ensure fresh data.
-
     is_url = query.strip().lower().startswith(("http://", "https://"))
     if not is_url and "." in query and not query.startswith(" "):
         if len(query.strip()) > 3 and any(ext in query.lower() for ext in [".com", ".co.uk", ".net", ".org", ".io"]):
@@ -1014,17 +1012,12 @@ def scrape(query: str):
     def _needs(r):
         return (not r.get("company_name"), not r.get("address"), not r.get("officer"))
 
-    def _done(r):
-        return all([r.get("company_name"), r.get("address"), r.get("officer")])
-
-    # ── Step 1: Website scrape (name + address) ───────────────────────────
+    # ── Step 1: Fast website scrape (parallel, with timeout) ───────────────
     if is_url:
         site = scrape_website_fast(query)
         result.update(site)
-        if result.get("company_name") and result.get("address"):
-            pass  # continue to search for officer
 
-    # ── Step 2: WHOIS lookup ────────────────────────────────────────────────
+    # ── Step 2: Quick WHOIS if missing name/address ────────────────────────
     _, n_addr, n_off = _needs(result)
     if is_url and (n_addr or not result.get("company_name")):
         from urllib.parse import urlparse
@@ -1032,33 +1025,18 @@ def scrape(query: str):
         whois_data = _whois_lookup(domain)
         if whois_data:
             if not result["company_name"] and whois_data.get("organization"):
-                candidate_name = whois_data["organization"]
-                valid = bool(candidate_name) and len(candidate_name) >= 3
-                score = _score_candidate('company_name', candidate_name, 'WHOIS', valid)
-                if score > result['confidence']['company_name']:
-                    result['company_name'] = candidate_name
-                    result['confidence']['company_name'] = score
-                    result['source'] = 'WHOIS'
+                result['company_name'] = whois_data["organization"]
+                result['confidence']['company_name'] = _score_candidate('company_name', whois_data["organization"], 'WHOIS', True)
+                result['source'] = 'WHOIS'
             if n_addr and whois_data.get("address"):
-                address_parts = []
-                if whois_data.get("address"):
-                    address_parts.append(whois_data["address"])
-                if whois_data.get("city"):
-                    address_parts.append(whois_data["city"])
-                if whois_data.get("state"):
-                    address_parts.append(whois_data["state"])
-                if whois_data.get("country"):
-                    address_parts.append(whois_data["country"])
-                if address_parts:
-                    candidate_address = ", ".join(address_parts)
-                    valid = _validate_address(candidate_address)
-                    score = _score_candidate('address', candidate_address, 'WHOIS', valid)
-                    if score > result['confidence']['address']:
-                        result['address'] = candidate_address
-                        result['confidence']['address'] = score
-                        result['source'] = 'WHOIS'
+                address_parts = [whois_data.get("address", ""), whois_data.get("city", ""), whois_data.get("country", "")]
+                candidate_address = ", ".join([p for p in address_parts if p])
+                if _validate_address(candidate_address):
+                    result['address'] = candidate_address
+                    result['confidence']['address'] = _score_candidate('address', candidate_address, 'WHOIS', True)
+                    result['source'] = result.get('source', '') or 'WHOIS'
 
-    # ── Step 3: DuckDuckGo for officer FIRST ───────────────────────────────
+    # ── Step 3: Quick DuckDuckGo for officer only (if missing) ────────
     _, n_addr, n_off = _needs(result)
     if n_off:
         search_query = result.get("company_name") or query
@@ -1066,68 +1044,19 @@ def scrape(query: str):
         if ddg.get("officer"):
             result['officer'] = ddg['officer']
             result['confidence']['officer'] = _score_candidate('officer', ddg['officer'], 'DuckDuckGo', _validate_officer(ddg['officer']))
-            result['source'] = (result.get('source', '') + ' | DuckDuckGo').strip(' |')
-            print(f"  Found officer via DuckDuckGo: {result.get('officer')}")
 
-    # ── Step 4: Companies House for officer (after DuckDuckGo) ─────────────
+    # ── Step 4: Companies House for missing data (fast API) ──────────────
     _, n_addr, n_off = _needs(result)
-    if n_off and result.get("company_name"):
-        ch = search_companies_house(result["company_name"], needs_address=False, needs_officer=True)
-        if ch.get("officer"):
-            result['officer'] = ch['officer']
-            result['confidence']['officer'] = _score_candidate('officer', ch['officer'], 'Companies House', _validate_officer(ch['officer']))
-            result['source'] = (result.get('source', '') + ' | Companies House').strip(' |')
-            print(f"  Found officer via Companies House: {result.get('officer')}")
-
-    # ── Step 5: Serper for officer ─────────────────────────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_off:
-        search_query = result.get("company_name") or query
-        serper = _search_and_scrape(search_query, needs_address=False, needs_officer=True, engine="serper")
-        if serper.get("officer"):
-            result['officer'] = serper['officer']
-            result['confidence']['officer'] = _score_candidate('officer', serper['officer'], 'Serper', _validate_officer(serper['officer']))
-            result['source'] = (result.get('source', '') + ' | Serper').strip(' |')
-            print(f"  Found officer via Serper: {result.get('officer')}")
-
-    # ── Step 6: Website officer fallback (last resort - rarely has officer) ─
-    if is_url and not result.get("officer"):
-        site_off = scrape_website_fast(query)
-        if site_off.get("officer"):
-            result['officer'] = site_off['officer']
-            result['confidence']['officer'] = _score_candidate('officer', site_off['officer'], 'Website', _validate_officer(site_off['officer']))
-            print(f"  Found officer via Website: {result.get('officer')}")
-
-    # ── Step 7: Companies House for remaining address ──────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_addr and result.get("company_name"):
-        ch = search_companies_house(result["company_name"], needs_address=True, needs_officer=False)
-        if ch.get("address"):
+    if result.get("company_name") and (n_addr or n_off):
+        ch = search_companies_house(result["company_name"], needs_address=n_addr, needs_officer=n_off)
+        if ch.get("address") and n_addr:
             result['address'] = ch['address']
             result['confidence']['address'] = _score_candidate('address', ch['address'], 'Companies House', _validate_address(ch['address']))
-            result['source'] = (result.get('source', '') + ' | Companies House').strip(' |')
+        if ch.get("officer") and n_off:
+            result['officer'] = ch['officer']
+            result['confidence']['officer'] = _score_candidate('officer', ch['officer'], 'Companies House', _validate_officer(ch['officer']))
 
-    # ── Step 8: DuckDuckGo for remaining address ────────────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_addr:
-        search_query = result.get("company_name") or query
-        ddg = _search_and_scrape(search_query, needs_address=True, needs_officer=False, engine="ddg")
-        if ddg.get("address"):
-            result['address'] = ddg['address']
-            result['confidence']['address'] = _score_candidate('address', ddg['address'], 'DuckDuckGo', _validate_address(ddg['address']))
-            result['source'] = (result.get('source', '') + ' | DuckDuckGo').strip(' |')
-
-    # ── Step 9: Serper for remaining address ────────────────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_addr:
-        search_query = result.get("company_name") or query
-        serper = _search_and_scrape(search_query, needs_address=True, needs_officer=False, engine="serper")
-        if serper.get("address"):
-            result['address'] = serper['address']
-            result['confidence']['address'] = _score_candidate('address', serper['address'], 'Serper', _validate_address(serper['address']))
-            result['source'] = (result.get('source', '') + ' | Serper').strip(' |')
-
-    # Fallback fallback - domain extraction for company name
+    # Fallback - domain extraction for company name
     if not result["company_name"] or result["company_name"] == query or len(result["company_name"]) < 3:
         from urllib.parse import urlparse
         parsed = urlparse(query)

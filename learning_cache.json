@@ -19298,21 +19298,263 @@
       "company_name": {
         "value": "CIS Security | Security experts, innovative partners",
         "confidence": 1.0,
-        "source": "Website"
+        "source": "UserCorrect"
       },
       "address": {
         "value": "418, -426 Lewisham High Street, Lewisham, London, SE13 6LJ",
         "confidence": 1.0,
-        "source": "Website | Companies House | Companies House"
+        "source": "UserCorrect"
       },
       "officer": {
         "value": "Neill Catton",
         "confidence": 1.0,
-        "source": "Website | Companies House | Companies House"
+        "source": "UserCorrect"
+      }
+    },
+    "validated": true,
+    "user_corrected": true,
+    "updated_at": "2026-03-19T20:59:55.224214"
+  },
+  "whistlepr.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Whistle PR",
+        "confidence": 1.0,
+        "source": "UserCorrect"
+      },
+      "address": {
+        "value": "306, Fort Dunlop, Fort Parkway, Birmingham, B24 9FD, United Kingdom",
+        "confidence": 1.0,
+        "source": "UserCorrect"
+      },
+      "officer": {
+        "value": "Sarah Kent",
+        "confidence": 1.0,
+        "source": "UserCorrect"
+      }
+    },
+    "validated": true,
+    "user_corrected": true,
+    "updated_at": "2026-03-19T21:02:28.607824"
+  },
+  "sangersmaidstone.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Sangers (Maidstone) Limited",
+        "confidence": 1.0,
+        "source": "UserCorrect"
+      },
+      "address": {
+        "value": "Parkwood, Sutton Road, Maidstone, Kent, ME15 9NE",
+        "confidence": 1.0,
+        "source": "UserCorrect"
+      },
+      "officer": {
+        "value": "Peter Sayer",
+        "confidence": 1.0,
+        "source": "UserCorrect"
+      }
+    },
+    "validated": true,
+    "user_corrected": true,
+    "updated_at": "2026-03-19T20:59:02.694362"
+  },
+  "freud.org.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Freud Museum London",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "20, Maresfield Gardens, London, NW3 5SX",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Susanna Abse",
+        "confidence": 1.0,
+        "source": "Website"
       }
     },
     "validated": true,
     "user_corrected": false,
-    "updated_at": "2026-03-19T20:44:02.511630"
+    "updated_at": "2026-03-19T21:56:04.424885"
+  },
+  "apollo-ht.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Apollo Healthcare Technologies Limited",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "Acticare, Supply Chain Executive Read more Find us Unit, LS27 7JZ",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "David Locke WHX",
+        "confidence": 1.0,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:56:14.673700"
+  },
+  "markonesafetysolutions.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Mark One Safety Solutions",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "Lye, St, DY9 7BQ",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Mark Bridges",
+        "confidence": 1.0,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:56:44.689244"
+  },
+  "quest4alloys.com": {
+    "candidates": {
+      "company_name": {
+        "value": "Suppliers of Nickel Alloys, Titanium and Stainless Steels",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "ly areas which ensures that we can offer assistance with any of your Nickel Alloy, Stainless St, SC21 SU",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Hans Lempka",
+        "confidence": 0.75,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:56:59.028863"
+  },
+  "totalkare.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Totalkare",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "Block G1, Dandy Bank Road, DY6 7TD",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Of Engineering Basil",
+        "confidence": 0.75,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:57:35.366131"
+  },
+  "craftofcommunication.com": {
+    "candidates": {
+      "company_name": {
+        "value": "About us – Craft of Communication",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "71-75, Shelton Street, London, WC2H 9JQ, United Kingdom",
+        "confidence": 0.9,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Gaganajit Suppal",
+        "confidence": 1.0,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:57:54.539774"
+  },
+  "iconicdigital.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Iconic Digital",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "Iconic Digital, 69-73 Manor Road, SM6 0DD",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Malcolm Denmark",
+        "confidence": 1.0,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:58:15.071998"
+  },
+  "iglooaccommodation.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Student Accommodation Sheffield - Igloo Accommodation",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "8-10 Broomhall Road, Broomhill Map Ecclesall Road Hunters Bar City, S10 2DR",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Sarah Siggs",
+        "confidence": 1.0,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:58:45.381732"
+  },
+  "agenda-screening.co.uk": {
+    "candidates": {
+      "company_name": {
+        "value": "Agenda Screening",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "address": {
+        "value": "Hull, Unit, HU2 8BA",
+        "confidence": 1.0,
+        "source": "Website"
+      },
+      "officer": {
+        "value": "Angus Bankes",
+        "confidence": 1.0,
+        "source": "Website"
+      }
+    },
+    "validated": true,
+    "user_corrected": false,
+    "updated_at": "2026-03-19T21:59:07.151895"
   }
 }

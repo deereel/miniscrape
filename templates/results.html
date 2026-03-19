@@ -306,7 +306,9 @@ document.addEventListener('DOMContentLoaded', function() {
             }
 
             const urls = uncorrectedRows.map(r => r.dataset.url).filter(Boolean);
-            const mode = rows[0].dataset.mode || 'fast';
+            // Switch mode: if fast, use deep; if deep, use fast
+            const currentMode = rows[0].dataset.mode || 'fast';
+            const mode = currentMode === 'fast' ? 'deep' : 'fast';
             retryWrongButton.disabled = true;
             retryWrongButton.innerText = 'Retrying...';
 

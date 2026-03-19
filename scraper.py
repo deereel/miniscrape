@@ -1031,16 +1031,17 @@ def _collect_text_for_ai(url: str, max_pages: int = 4) -> str:
 # ── Main entry point ───────────────────────────────────────────────────────
 
 def scrape(query: str) -> dict:
+    """Optimized scraping function - simplified for speed:
+    1. Website scrape (name + address)
+    2. WHOIS if needed
+    3. DuckDuckGo for officer (if missing)
+    4. Companies House for remaining fields
+    """
     result = {"company_name": "", "address": "", "officer": "", "registered_name": "", "source": "", "confidence": {"company_name": 0.0, "address": 0.0, "officer": 0.0}}
-    # Check if it's a URL and add protocol if missing
     is_url = query.strip().lower().startswith(("http://", "https://"))
     if not is_url and "." in query and not query.startswith(" "):
-        # Try to determine if it's a URL (contains domain extension)
-        # Skip if it contains spaces or looks like a plain text query
         if len(query.strip()) > 3 and any(ext in query.lower() for ext in [".com", ".co.uk", ".net", ".org", ".io", ".biz", ".info", ".uk", ".de", ".fr"]):
-            # Strip any leading/trailing whitespace and add https:// protocol
             stripped = query.strip()
-            # Remove protocol prefixes safely (avoid lstrip-character semantics)
             if stripped.lower().startswith("http://"):
                 stripped = stripped[len("http://"):]
             elif stripped.lower().startswith("https://"):
@@ -1051,9 +1052,7 @@ def scrape(query: str) -> dict:
             is_url = True
 
     def _finalise(r: dict) -> dict:
-        """Finalize and validate scraping result with Pydantic"""
         try:
-            # Prepare data for validation
             validated_data = {
                 "company_name": r.get("company_name", query).strip(),
                 "address": r.get("address", "").strip(),
@@ -1064,14 +1063,10 @@ def scrape(query: str) -> dict:
                 "website_url": query if is_url else None,
                 "scrape_timestamp": datetime.now()
             }
-            
-            # Validate with Pydantic
             validated_result = ScrapingResult(**validated_data)
             return validated_result.dict(exclude_none=True)
-            
         except Exception as e:
             print(f"  Validation error: {e}")
-            # Fallback to basic validation if Pydantic fails
             r.pop("registered_name", None)
             r.setdefault("company_name", query)
             r.setdefault("address", "")
@@ -1079,92 +1074,28 @@ def scrape(query: str) -> dict:
             r.setdefault("source", "")
             return r
 
-    # ── Step 0: Learning cache (for format guidance only - always do fresh scraping) ─────────
-    # Note: We always scrape fresh as information may have changed.
-    # Cache entries (especially ManualVerified) are used as format guides only.
-
-    # ── Step 1: Website (name + address only) ───────────────────────────
+    # ── Step 1: Website scrape (name + address) ───────────────────────────
     if is_url:
         site = scrape_website(query, needs_name=True, needs_address=True, needs_officer=False)
         result = _merge(result, site)
-        if result.get("company_name") and result.get("address"):
-            pass  # continue to CH for officer
 
-    # ── Step 2: Companies House ──────────────────────────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_addr or n_off:
-        search_terms = []
-        if is_url:
-            from urllib.parse import urlparse
-            domain_word = urlparse(query).netloc.replace("www.", "").split(".")[0]
-
-            # 1. Registered name from footer — most reliable
-            if result.get("registered_name"):
-                search_terms.append(result["registered_name"])
-
-            # 2. Try domain word and progressively shorter prefixes
-            # e.g. amcorenewables -> amcorenewables, amcorenewabl, amcorene, amcore
-            tried = set()
-            for length in [len(domain_word), len(domain_word)*3//4, len(domain_word)//2 + 2, len(domain_word)//3 + 2]:
-                prefix = domain_word[:max(length, 3)]
-                if prefix not in tried:
-                    tried.add(prefix)
-                    search_terms.append(prefix)
-
-            # 3. Trading name last
-            if result.get("company_name"):
-                search_terms.append(result["company_name"])
-        if not is_url:
-            search_terms.append(query)
-
-        # Deduplicate while preserving order
-        seen = set()
-        search_terms = [t for t in search_terms if not (t.lower() in seen or seen.add(t.lower()))]
-
-        for term in search_terms:
-            _, n_addr, n_off = _needs(result)
-            if not n_addr and not n_off:
-                break
-            ch = search_companies_house(term, needs_address=n_addr, needs_officer=n_off)
-            result = _merge(result, ch)
-            if _done(result):
-                return _finalise(result)
-
-    # ── Step 2.5: WHOIS Lookup ────────────────────────────────────────────
+    # ── Step 2: WHOIS if missing data ─────────────────────────────────────
     _, n_addr, n_off = _needs(result)
     if is_url and (n_addr or not result.get("company_name")):
         from urllib.parse import urlparse
         domain = urlparse(query).netloc.replace("www.", "")
-        
         whois_data = _whois_lookup(domain)
         if whois_data:
             whois_result = {"source": "WHOIS"}
-            
             if not result.get("company_name") and whois_data.get("organization"):
                 whois_result["company_name"] = whois_data["organization"]
-                
             if n_addr and whois_data.get("address"):
-                # Try to format the address
-                address_parts = []
-                if whois_data.get("address"):
-                    address_parts.append(whois_data["address"])
-                if whois_data.get("city"):
-                    address_parts.append(whois_data["city"])
-                if whois_data.get("state"):
-                    address_parts.append(whois_data["state"])
-                if whois_data.get("country"):
-                    address_parts.append(whois_data["country"])
-                
-                if address_parts:
-                    whois_result["address"] = ", ".join(address_parts)
-            
+                address_parts = [whois_data.get("address", ""), whois_data.get("city", ""), whois_data.get("country", "")]
+                whois_result["address"] = ", ".join([p for p in address_parts if p])
             if whois_result.get("company_name") or whois_result.get("address"):
                 result = _merge(result, whois_result)
-                if _done(result):
-                    return _finalise(result)
 
-    # ── Step 3: DuckDuckGo FIRST for officer ─────────────────────────────────
-    # Note: Officer is almost never on the site, so we prioritize search engines first
+    # ── Step 3: Quick DuckDuckGo for officer only ─────────────────────────
     _, n_addr, n_off = _needs(result)
     if n_off:
         search_query = result.get("company_name") or query
@@ -1173,65 +1104,18 @@ def scrape(query: str) -> dict:
         if result.get("officer"):
             print(f"  Found officer via DuckDuckGo: {result.get('officer')}")
 
-    # ── Step 4: Companies House for officer (after DuckDuckGo) ─────────────
+    # ── Step 4: Companies House for remaining fields (fast API) ──────────
     _, n_addr, n_off = _needs(result)
-    if n_off and result.get("company_name"):
-        ch = search_companies_house(result["company_name"], needs_address=False, needs_officer=True)
-        if ch.get("officer"):
-            result = _merge(result, ch)
-            print(f"  Found officer via Companies House: {result.get('officer')}")
-
-    # ── Step 5: Serper for officer ─────────────────────────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_off:
-        search_query = result.get("company_name") or query
-        serper = _search_and_scrape(search_query, needs_address=False, needs_officer=True, engine="serper")
-        result = _merge(result, serper)
+    if result.get("company_name") and (n_addr or n_off):
+        ch = search_companies_house(result["company_name"], needs_address=n_addr, needs_officer=n_off)
+        result = _merge(result, ch)
         if result.get("officer"):
-            print(f"  Found officer via Serper: {result.get('officer')}")
-
-    # ── Step 6: Website officer fallback (last resort - rarely has officer) ─
-    if is_url and not result.get("officer"):
-        site_off = scrape_website(query, needs_name=False, needs_address=False, needs_officer=True)
-        result = _merge(result, site_off)
-        if _done(result):
-            return _finalise(result)
-
-    # ── Step 7: DuckDuckGo for remaining address ────────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_addr:
-        search_query = result.get("company_name") or query
-        ddg = _search_and_scrape(search_query, needs_address=True, needs_officer=False, engine="ddg")
-        result = _merge(result, ddg)
-        if _done(result):
-            return _finalise(result)
-
-    # ── Step 8: Serper for remaining address ────────────────────────────
-    _, n_addr, n_off = _needs(result)
-    if n_addr:
-        search_query = result.get("company_name") or query
-        serper = _search_and_scrape(search_query, needs_address=True, needs_officer=False, engine="serper")
-        result = _merge(result, serper)
-
-    # ── Step 8: AI fallback on broader site text
-    _, n_addr, n_off = _needs(result)
-    if (n_addr or n_off) and is_url:
-        ai_text = _collect_text_for_ai(query, max_pages=5)
-        if n_addr:
-            ai_address = _extract_address(ai_text)
-            if ai_address:
-                result["address"] = ai_address
-                result["source"] = (result.get("source", "") + " | AI").strip(' |')
-        if n_off:
-            ai_officer = _extract_person_name(ai_text)
-            if ai_officer:
-                result["officer"] = ai_officer
-                result["source"] = (result.get("source", "") + " | AI").strip(' |')
+            print(f"  Found officer via Companies House: {result.get('officer')}")
 
     final_result = _finalise(result)
 
-    # Store in learning cache if strong or complete with high confidence
-    if is_url and final_result.get("company_name") and final_result.get("address") and final_result.get("officer"):
+    # Store in learning cache if strong confidence
+    if is_url and final_result.get("company_name") and max(result.get('confidence', {}).values(), 0) >= 0.7:
         store_learning_student = {
             'company_name': final_result.get('company_name', ''),
             'address': final_result.get('address', ''),

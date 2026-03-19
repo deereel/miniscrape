@@ -167,6 +167,7 @@
             <a href="{{ url_for('export', filename=csv_file, format='xlsx') }}" class="btn btn.secondary">
                 Download Excel
             </a>
+            <button id="retry-wrong" class="btn btn-warning" type="button">Wrong result - search again</button>
         </div>
     </div>
     
@@ -176,28 +177,34 @@
                 <thead>
                     <tr>
                         <th>URL</th>
+                        <th>Mode</th>
                         <th>Company Name</th>
                         <th>Company Address</th>
                         <th>Officer First Name</th>
                         <th>Officer Last Name</th>
                         <th>Source</th>
+                        <th>Action</th>
                         <th>Status</th>
                     </tr>
                 </thead>
                 <tbody>
                     {% for result in results %}
-                        <tr>
+                        <tr data-url="{{ result.url }}" data-mode="{{ result.search_mode or 'fast' }}" data-corrected="{{ 'true' if result.source == 'LearningCache' or result.source == 'UserCorrect' else 'false' }}">
                             <td class="url-cell">
                                 <a href="{{ result.url }}" target="_blank" rel="noopener noreferrer">
                                     {{ result.url }}
                                 </a>
                             </td>
-                            <td>{{ result.company_name }}</td>
+                            <td>{{ result.search_mode or 'fast' }}</td>
+                            <td class="company-cell">{{ result.company_name }}</td>
                             <td class="address-cell">{{ result.address }}</td>
-                            <td>{{ result.officer_first }}</td>
-                            <td>{{ result.officer_last }}</td>
-                            <td>{{ result.source }}</td>
+                            <td class="officer-first-cell">{{ result.officer_first }}</td>
+                            <td class="officer-last-cell">{{ result.officer_last }}</td>
+                            <td class="source-cell">{{ result.source }}</td>
                             <td>
+                                <button type="button" class="btn btn-success btn-xs correct-btn" data-url="{{ result.url }}" {% if result.source == 'LearningCache' or result.source == 'UserCorrect' %}disabled{% endif %}>Correct</button>
+                            </td>
+                            <td class="status-cell">
                                 {% if result.company_name and not result.company_name.startswith('ERROR') %}
                                     <span class="status success">✓ Success</span>
                                 {% else %}
@@ -226,4 +233,111 @@
         </a>
     </div>
 </div>
+
+<script>
+document.addEventListener('DOMContentLoaded', function() {
+    const retryWrongButton = document.getElementById('retry-wrong');
+
+    function updateRow(row, data) {
+        row.querySelector('.company-cell').innerText = data.company_name || '';
+        row.querySelector('.address-cell').innerText = data.address || '';
+        row.querySelector('.officer-first-cell').innerText = data.officer_first || '';
+        row.querySelector('.officer-last-cell').innerText = data.officer_last || '';
+        row.querySelector('.source-cell').innerText = data.source || '';
+        row.dataset.mode = data.search_mode || row.dataset.mode || 'fast';
+
+        const statusCell = row.querySelector('.status-cell');
+        if (data.company_name && !data.company_name.startsWith('ERROR')) {
+            statusCell.innerHTML = '<span class="status success">✓ Success</span>';
+        } else {
+            statusCell.innerHTML = '<span class="status error">✗ Error</span>';
+        }
+    }
+
+    document.querySelectorAll('.correct-btn').forEach(btn => {
+        btn.addEventListener('click', async function(event) {
+            const row = event.currentTarget.closest('tr');
+            const url = row.dataset.url;
+            const currentCompany = row.querySelector('.company-cell').innerText.trim();
+            const currentAddress = row.querySelector('.address-cell').innerText.trim();
+            const currentOfficer = [row.querySelector('.officer-first-cell').innerText.trim(), row.querySelector('.officer-last-cell').innerText.trim()].filter(Boolean).join(' ');
+
+            const company_name = prompt('Correct company name:', currentCompany || '');
+            if (!company_name) { return; }
+            const address = prompt('Correct company address:', currentAddress || '');
+            if (!address) { return; }
+            const officer = prompt('Correct officer full name:', currentOfficer || '');
+            if (!officer) { return; }
+
+            try {
+                const res = await fetch('/correct', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ url, company_name, address, officer }),
+                });
+                const result = await res.json();
+                if (res.ok && result.success) {
+                    btn.disabled = true;
+                    row.dataset.corrected = 'true';
+                    row.querySelector('.source-cell').innerText = 'UserCorrect';
+                    row.querySelector('.status-cell').innerHTML = '<span class="status success">✓ Corrected</span>';
+                    alert('Correction saved and cached.');
+                } else {
+                    alert('Failed to save correction: ' + (result.message || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Error saving correction: ' + err.message);
+            }
+        });
+    });
+
+    if (retryWrongButton) {
+        retryWrongButton.addEventListener('click', async function() {
+            const rows = Array.from(document.querySelectorAll('table tbody tr'));
+            if (!rows.length) {
+                alert('No rows to retry.');
+                return;
+            }
+
+            const uncorrectedRows = rows.filter(r => r.dataset.corrected !== 'true');
+            if (!uncorrectedRows.length) {
+                alert('All rows are corrected; nothing to retry.');
+                return;
+            }
+
+            const urls = uncorrectedRows.map(r => r.dataset.url).filter(Boolean);
+            const mode = rows[0].dataset.mode || 'fast';
+            retryWrongButton.disabled = true;
+            retryWrongButton.innerText = 'Retrying...';
+
+            try {
+                const res = await fetch('/clear_and_retry', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ urls, mode }),
+                });
+                const result = await res.json();
+                if (res.ok && result.success && Array.isArray(result.results)) {
+                    result.results.forEach((item) => {
+                        const existingRow = uncorrectedRows.find(r => r.dataset.url === item.url);
+                        if (existingRow) {
+                            updateRow(existingRow, item);
+                            existingRow.querySelector('.correct-btn').disabled = false;
+                        }
+                    });
+                    alert('Re-run completed for uncorrected rows.');
+                } else {
+                    alert('Bulk retry failed: ' + (result.message || 'Unknown error'));
+                }
+            } catch (err) {
+                alert('Bulk retry error: ' + err.message);
+            } finally {
+                retryWrongButton.disabled = false;
+                retryWrongButton.innerText = 'Wrong result - search again';
+            }
+        });
+    }
+});
+</script>
+
 {% endblock %}

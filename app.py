@@ -9,7 +9,7 @@ import sys
 from flask import Flask, render_template, request, jsonify, send_file, flash, redirect
 from flask_wtf import FlaskForm
 from flask_wtf.file import FileField, FileAllowed
-from wtforms import TextAreaField, SubmitField
+from wtforms import TextAreaField, SubmitField, RadioField
 from wtforms.validators import DataRequired
 import pandas as pd
 from io import BytesIO
@@ -34,6 +34,10 @@ class ScrapingForm(FlaskForm):
                        validators=[DataRequired()])
     file = FileField('Or upload file (.txt or .xlsx)', 
                     validators=[FileAllowed(['txt', 'xlsx', 'xls'], 'Text or Excel files only')])
+    search_mode = RadioField('Search mode',
+                    choices=[('fast', 'Fast (homepage parse only)'), ('deep', 'Deep (CH + search + AI)')],
+                    default='fast',
+                    validators=[DataRequired()])
     submit = SubmitField('Scrape')
 
 
@@ -90,17 +94,27 @@ def index():
             flash('Please enter at least one URL or upload a file with URLs', 'error')
             return render_template('index.html', form=form)
         
+        scrape_mode = form.search_mode.data or 'fast'
+        scrape_fn = None
+        if scrape_mode == 'deep':
+            from scraper import scrape as deep_scrape
+            scrape_fn = deep_scrape
+        else:
+            from fast_scraper import scrape as fast_scrape
+            scrape_fn = fast_scrape
+
         # Scrape URLs (in background or foreground)
         results = []
         for url in urls:
             try:
-                result = scrape(url)
+                result = scrape_fn(url)
                 results.append({
                     'url': url,
                     'company_name': result.get('company_name', ''),
                     'address': result.get('address', ''),
                     'officer': result.get('officer', ''),
-                    'source': result.get('source', '')
+                    'source': result.get('source', ''),
+                    'search_mode': scrape_mode
                 })
             except Exception as e:
                 results.append({
@@ -218,6 +232,132 @@ def scrape_single(url):
         })
     except Exception as e:
         return jsonify({'error': str(e)}), 500
+
+
+@app.route('/feedback', methods=['POST'])
+def feedback():
+    """Save corrected data so the scraper learns from mistakes."""
+    payload = request.get_json(silent=True) or {}
+    url = payload.get('url') or ''
+    company_name = payload.get('company_name', '').strip()
+    address = payload.get('address', '').strip()
+    officer = payload.get('officer', '').strip()
+
+    if not url or not company_name or not address or not officer:
+        return jsonify({'success': False, 'message': 'url, company_name, address, officer required'}), 400
+
+    try:
+        from scraper import store_learning_correction as sc_store
+        from fast_scraper import store_learning_correction as fs_store
+        sc_ok = sc_store(url, {
+            'company_name': company_name,
+            'address': address,
+            'officer': officer,
+            'source': 'UserCorrection'
+        })
+        fs_ok = fs_store(url, {
+            'company_name': company_name,
+            'address': address,
+            'officer': officer,
+            'source': 'UserCorrection'
+        })
+        if sc_ok or fs_ok:
+            return jsonify({'success': True, 'message': 'Feedback saved successfully'})
+        return jsonify({'success': False, 'message': 'Failed to save feedback'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/correct', methods=['POST'])
+def correct_result():
+    data = request.get_json(silent=True) or {}
+    url = data.get('url')
+    company_name = data.get('company_name', '').strip()
+    address = data.get('address', '').strip()
+    officer = data.get('officer', '').strip()
+
+    if not url or not company_name or not address or not officer:
+        return jsonify({'success': False, 'message': 'Missing required fields'}), 400
+
+    try:
+        from scraper import store_learning_correction as sc_store
+        from fast_scraper import store_learning_correction as fs_store
+        sc_ok = sc_store(url, {
+            'company_name': company_name,
+            'address': address,
+            'officer': officer,
+            'source': 'UserCorrect'
+        })
+        fs_ok = fs_store(url, {
+            'company_name': company_name,
+            'address': address,
+            'officer': officer,
+            'source': 'UserCorrect'
+        })
+        if sc_ok or fs_ok:
+            return jsonify({'success': True, 'message': 'Correction cached'})
+        return jsonify({'success': False, 'message': 'Could not cache correction'}), 500
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
+
+
+@app.route('/clear_and_retry', methods=['POST'])
+def clear_and_retry():
+    data = request.get_json(silent=True) or {}
+    urls = data.get('urls', [])
+    mode = data.get('mode', 'fast')
+    if not urls or not isinstance(urls, list):
+        return jsonify({'success': False, 'message': 'Missing urls list'}), 400
+
+    def parse_officer(officer):
+        if not officer or not isinstance(officer, str):
+            return '', ''
+        parts = officer.strip().split()
+        if len(parts) >= 2:
+            return parts[0], ' '.join(parts[1:])
+        if parts:
+            return parts[0], ''
+        return '', ''
+
+    try:
+        from scraper import clear_learning_entry as sc_clear, scrape as deep_scrape
+        from fast_scraper import clear_learning_entry as fs_clear, scrape as fast_scrape
+
+        results = []
+
+        for url in urls:
+            sc_clear(url)
+            fs_clear(url)
+
+            primary_fn = deep_scrape if mode == 'deep' else fast_scrape
+            fallback_fn = fast_scrape if mode == 'deep' else deep_scrape
+
+            res = primary_fn(url)
+            needs_fallback = False
+            if not res.get('company_name') or res.get('company_name').startswith('ERROR') or not res.get('address'):
+                needs_fallback = True
+
+            if needs_fallback:
+                fallback_res = fallback_fn(url)
+                if fallback_res and (fallback_res.get('company_name') or fallback_res.get('address') or fallback_res.get('officer')):
+                    # keep corrected source if produced by user correction
+                    res = fallback_res
+
+            officer_first, officer_last = parse_officer(res.get('officer', ''))
+            results.append({
+                'url': url,
+                'company_name': res.get('company_name', ''),
+                'address': res.get('address', ''),
+                'officer': res.get('officer', ''),
+                'officer_first': officer_first,
+                'officer_last': officer_last,
+                'source': res.get('source', ''),
+                'search_mode': mode
+            })
+
+        return jsonify({'success': True, 'results': results})
+    except Exception as e:
+        return jsonify({'success': False, 'message': str(e)}), 500
 
 
 @app.route('/about')

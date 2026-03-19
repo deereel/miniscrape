@@ -5,3 +5,4 @@ __pycache__/
 venv/
 *.html
 test_specific_sites.tmp.py
+"scrape_sites.tmp.py" 

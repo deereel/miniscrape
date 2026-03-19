@@ -8,6 +8,7 @@ class ScrapingResult(BaseModel):
     address: str = Field(..., min_length=1, description="Company address")
     officer: str = Field(..., min_length=1, description="Key officer/contact")
     source: str = Field(..., min_length=1, description="Source of information")
+    confidence: dict = Field(..., description="Confidence scores for each field")
     registered_name: Optional[str] = Field(None, description="Registered company name")
     website_url: Optional[HttpUrl] = Field(None, description="Website URL")
     scrape_timestamp: Optional[datetime] = Field(None, description="Timestamp of scraping")

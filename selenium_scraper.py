@@ -1,5 +1,5 @@
 #!/usr/bin/env python3
-"""Selenium-based scraper for JavaScript-rendered pages"""
+"""Fast Selenium-based scraper for JavaScript-rendered pages - optimized for speed"""
 
 from selenium import webdriver
 from selenium.webdriver.chrome.service import Service
@@ -12,12 +12,10 @@ import time
 from bs4 import BeautifulSoup
 
 
-def get_js_rendered_content(url, timeout=10, headless=True):
+def get_js_rendered_content(url, timeout=8, headless=True):
     """
     Get JavaScript-rendered content from a URL using Selenium.
-    
-    Returns:
-        BeautifulSoup object of the rendered HTML, or None on failure
+    OPTIMIZED for speed - reduced timeouts and faster page loads.
     """
     chrome_options = Options()
     if headless:
@@ -26,47 +24,70 @@ def get_js_rendered_content(url, timeout=10, headless=True):
     chrome_options.add_argument('--disable-dev-shm-usage')
     chrome_options.add_argument('--disable-gpu')
     chrome_options.add_argument('--window-size=1920,1080')
+    chrome_options.add_argument('--disable-blink-features=AutomationControlled')
+    chrome_options.add_argument('--disable-extensions')
+    chrome_options.add_argument('--disable-logging')
+    chrome_options.add_argument('--log-level=3')
+    # Faster page loads
+    chrome_options.page_load_strategy = 'eager'  # Don't wait for all resources
+    chrome_options.add_experimental_option('excludeSwitches', ['enable-automation'])
+    chrome_options.add_experimental_option('useAutomationExtension', False)
     
+    # Speed up networking
+    prefs = {
+        'profile.default_content_setting_values.notifications': 2,
+        'profile.default_content_settings.popups': 0,
+        'download.prompt_for_download': False,
+    }
+    chrome_options.add_experimental_option('prefs', prefs)
+
+    driver = None
     try:
         driver = webdriver.Chrome(
             service=Service(ChromeDriverManager().install()),
             options=chrome_options
         )
-        
+
         driver.set_page_load_timeout(timeout)
         driver.get(url)
+
+        # Minimal wait for DOM ready only (not full load)
+        WebDriverWait(driver, min(timeout, 5)).until(
+            lambda d: d.execute_script('return document.readyState') in ['complete', 'interactive']
+        )
         
-        # Wait for JavaScript to load
-        time.sleep(3)
-        
-        # Scroll to bottom to trigger any lazy loading
-        driver.execute_script("window.scrollTo(0, document.body.scrollHeight);")
-        time.sleep(2)
-        
+        # Small delay for initial JS render
+        time.sleep(0.5)
+
         html = driver.page_source
-        driver.quit()
-        
         return BeautifulSoup(html, 'lxml')
-        
+
     except Exception as e:
-        print(f"  Selenium error for {url}: {str(e)}")
-        try:
-            driver.quit()
-        except:
-            pass
+        # Don't print error for timeout - too noisy
+        if 'timeout' not in str(e).lower():
+            print(f"  Selenium error for {url}: {e}")
         return None
+
+    finally:
+        if driver:
+            try:
+                driver.quit()
+            except Exception:
+                pass
 
 
 def scrape_with_selenium(url):
     """
     Scrape company information from a JavaScript-rendered website using Selenium.
+    OPTIMIZED: Only fetches homepage, skips slow subpage fetching.
     """
-    soup = get_js_rendered_content(url)
+    soup = get_js_rendered_content(url, timeout=8)
     if not soup:
         return {"company_name": "", "address": "", "officer": "", "registered_name": "", "source": url}
     
     from scraper import _extract_company_name, _extract_address, _extract_person_name, _extract_registered_name
     
+    # Extract from main page only - much faster
     result = {
         "company_name": _extract_company_name(soup),
         "address": "",
@@ -75,30 +96,14 @@ def scrape_with_selenium(url):
         "source": url
     }
     
-    # Check if we got basic info, if not, try other pages
-    subpages = ["/about", "/about-us", "/contact", "/contact-us", "/team", "/our-team", "/leadership"]
-    
-    for subpage in subpages:
-        if result["company_name"] and result["address"] and result["officer"]:
-            break
+    # Get address/officer from main page text
+    if not result["address"] or not result["officer"]:
+        text = soup.get_text(" ", strip=True)
+        if not result["address"]:
+            result["address"] = _extract_address(text)
+        if not result["officer"]:
+            result["officer"] = _extract_person_name(text)
             
-        subpage_url = url.rstrip('/') + subpage
-        sub_soup = get_js_rendered_content(subpage_url, timeout=8)
-        if sub_soup:
-            if not result["company_name"]:
-                result["company_name"] = _extract_company_name(sub_soup)
-                
-            if not result["address"]:
-                text = sub_soup.get_text(" ", strip=True)
-                result["address"] = _extract_address(text)
-                
-            if not result["officer"]:
-                text = sub_soup.get_text(" ", strip=True)
-                result["officer"] = _extract_person_name(text)
-                
-            if not result["registered_name"]:
-                result["registered_name"] = _extract_registered_name(sub_soup)
-                
     return result
 
 
